@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useMemo, useEffect, ChangeEvent } from "react";
+import {
+  useState,
+  useRef,
+  useMemo,
+  useEffect,
+  useCallback,
+  ChangeEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   parseCSV,
@@ -16,6 +23,18 @@ import {
 } from "@/lib/csv";
 
 type SortField = keyof Omit<Card, "_id">;
+const PAGE_SIZE = 50;
+
+// ─── Debounce hook ────────────────────────────────────────────────────────────
+
+function useDebounce<T>(value: T, delay = 250): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 // ─── Card image tooltip ───────────────────────────────────────────────────────
 
@@ -28,27 +47,18 @@ function CardTooltip({
 }) {
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
-
   if (!scryfallId) return <span>{name}</span>;
-
-  const [a, b] = [scryfallId[0], scryfallId[1]];
-  const imgUrl = `https://cards.scryfall.io/normal/front/${a}/${b}/${scryfallId}.jpg`;
-
-  const onEnter = (e: React.MouseEvent) => {
-    setPos({ x: e.clientX, y: e.clientY });
-    setVisible(true);
-  };
-  const onMove = (e: React.MouseEvent) =>
-    setPos({ x: e.clientX, y: e.clientY });
-  const onLeave = () => setVisible(false);
-
+  const imgUrl = `https://cards.scryfall.io/normal/front/${scryfallId[0]}/${scryfallId[1]}/${scryfallId}.jpg`;
   return (
     <>
       <span
         className="border-b border-dashed border-white/20 hover:border-violet-400 transition-colors cursor-default"
-        onMouseEnter={onEnter}
-        onMouseMove={onMove}
-        onMouseLeave={onLeave}
+        onMouseEnter={(e) => {
+          setPos({ x: e.clientX, y: e.clientY });
+          setVisible(true);
+        }}
+        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setVisible(false)}
       >
         {name}
       </span>
@@ -74,33 +84,27 @@ function SetTooltip({ setCode }: { setCode: string }) {
     setIconCache[setCode] ?? null,
   );
   const [pos, setPos] = useState({ x: 0, y: 0 });
-
-  const onEnter = (e: React.MouseEvent) => {
-    setPos({ x: e.clientX, y: e.clientY });
-    setVisible(true);
-    if (!iconUrl) {
-      fetch(`https://api.scryfall.com/sets/${setCode.toLowerCase()}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.icon_svg_uri) {
-            setIconCache[setCode] = data.icon_svg_uri;
-            setIconUrl(data.icon_svg_uri);
-          }
-        })
-        .catch(() => {});
-    }
-  };
-  const onMove = (e: React.MouseEvent) =>
-    setPos({ x: e.clientX, y: e.clientY });
-  const onLeave = () => setVisible(false);
-
   return (
     <>
       <span
         className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase cursor-default hover:border-violet-400 hover:text-violet-300 transition-colors"
-        onMouseEnter={onEnter}
-        onMouseMove={onMove}
-        onMouseLeave={onLeave}
+        onMouseEnter={(e) => {
+          setPos({ x: e.clientX, y: e.clientY });
+          setVisible(true);
+          if (!iconUrl) {
+            fetch(`https://api.scryfall.com/sets/${setCode.toLowerCase()}`)
+              .then((r) => r.json())
+              .then((d) => {
+                if (d.icon_svg_uri) {
+                  setIconCache[setCode] = d.icon_svg_uri;
+                  setIconUrl(d.icon_svg_uri);
+                }
+              })
+              .catch(() => {});
+          }
+        }}
+        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setVisible(false)}
       >
         {setCode}
       </span>
@@ -135,28 +139,25 @@ function RarityPip({ rarity }: { rarity: string }) {
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 
-interface EditModalProps {
+function EditModal({
+  row,
+  onSave,
+  onClose,
+}: {
   row: Card;
-  onSave: (card: Card) => void;
+  onSave: (c: Card) => void;
   onClose: () => void;
-}
-
-function EditModal({ row, onSave, onClose }: EditModalProps) {
+}) {
   const [form, setForm] = useState<Card>({ ...row });
-
   const set =
-    (field: keyof Card) =>
-    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm((f) => ({ ...f, [field]: e.target.value }));
-
-  const toggle = (field: "Misprint" | "Altered") => () =>
-    setForm((f) => ({ ...f, [field]: f[field] === "true" ? "false" : "true" }));
-
-  const inputCls =
+    (f: keyof Card) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((p) => ({ ...p, [f]: e.target.value }));
+  const toggle = (f: "Misprint" | "Altered") => () =>
+    setForm((p) => ({ ...p, [f]: p[f] === "true" ? "false" : "true" }));
+  const inp =
     "bg-neutral-800 border border-white/10 rounded-md px-3 py-2 text-sm text-neutral-100 outline-none focus:border-violet-500 transition-colors w-full";
-  const labelCls =
+  const lbl =
     "flex flex-col gap-1.5 text-[11px] uppercase tracking-widest text-neutral-500 font-semibold";
-
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5"
@@ -166,12 +167,9 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
         className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[580px] max-h-[92vh] overflow-y-auto flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drag handle on mobile */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
           <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
-
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
           <h2 className="text-base font-semibold truncate pr-4">
             {row.Name || "New Card"}
@@ -183,57 +181,47 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
             ✕
           </button>
         </div>
-
-        {/* Fields */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-5 sm:p-6">
-          <label className={labelCls}>
+          <label className={lbl}>
             Name
-            <input
-              className={inputCls}
-              value={form.Name}
-              onChange={set("Name")}
-            />
+            <input className={inp} value={form.Name} onChange={set("Name")} />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Set Code
             <input
-              className={inputCls}
+              className={inp}
               value={form["Set code"]}
               onChange={set("Set code")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Set Name
             <input
-              className={inputCls}
+              className={inp}
               value={form["Set name"]}
               onChange={set("Set name")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Collector #
             <input
-              className={inputCls}
+              className={inp}
               value={form["Collector number"]}
               onChange={set("Collector number")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Foil
-            <select
-              className={inputCls}
-              value={form.Foil}
-              onChange={set("Foil")}
-            >
+            <select className={inp} value={form.Foil} onChange={set("Foil")}>
               <option value="normal">Normal</option>
               <option value="foil">Foil</option>
               <option value="etched">Etched</option>
             </select>
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Rarity
             <select
-              className={inputCls}
+              className={inp}
               value={form.Rarity}
               onChange={set("Rarity")}
             >
@@ -244,20 +232,20 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
               ))}
             </select>
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Quantity
             <input
-              className={inputCls}
+              className={inp}
               type="number"
               min="1"
               value={form.Quantity}
               onChange={set("Quantity")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Condition
             <select
-              className={inputCls}
+              className={inp}
               value={form.Condition}
               onChange={set("Condition")}
             >
@@ -268,10 +256,10 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
               ))}
             </select>
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Language
             <select
-              className={inputCls}
+              className={inp}
               value={form.Language}
               onChange={set("Language")}
             >
@@ -282,59 +270,52 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
               ))}
             </select>
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Purchase Price
             <input
-              className={inputCls}
+              className={inp}
               type="number"
               step="0.01"
               value={form["Purchase price"]}
               onChange={set("Purchase price")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             Currency
             <input
-              className={inputCls}
+              className={inp}
               value={form["Purchase price currency"]}
               onChange={set("Purchase price currency")}
             />
           </label>
-          <label className={labelCls}>
+          <label className={lbl}>
             ManaBox ID
             <input
-              className={inputCls}
+              className={inp}
               value={form["ManaBox ID"]}
               onChange={set("ManaBox ID")}
             />
           </label>
-          <label className={`${labelCls} sm:col-span-2`}>
+          <label className={`${lbl} sm:col-span-2`}>
             Scryfall ID
             <input
-              className={inputCls}
+              className={inp}
               value={form["Scryfall ID"]}
               onChange={set("Scryfall ID")}
             />
           </label>
-
           <div className="sm:col-span-2 flex gap-2.5">
-            {(["Misprint", "Altered"] as const).map((field) => (
+            {(["Misprint", "Altered"] as const).map((f) => (
               <button
-                key={field}
-                onClick={toggle(field)}
-                className={`flex-1 py-2.5 rounded-md text-sm border transition-all ${
-                  form[field] === "true"
-                    ? "bg-violet-500/20 border-violet-500 text-violet-300 font-semibold"
-                    : "bg-neutral-800 border-white/10 text-neutral-500"
-                }`}
+                key={f}
+                onClick={toggle(f)}
+                className={`flex-1 py-2.5 rounded-md text-sm border transition-all ${form[f] === "true" ? "bg-violet-500/20 border-violet-500 text-violet-300 font-semibold" : "bg-neutral-800 border-white/10 text-neutral-500"}`}
               >
-                {field}
+                {f}
               </button>
             ))}
           </div>
         </div>
-
-        {/* Footer */}
         <div className="flex justify-end gap-2.5 px-5 py-4 sm:px-6 border-t border-white/10">
           <button
             className="flex-1 sm:flex-none px-4 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors"
@@ -355,7 +336,6 @@ function EditModal({ row, onSave, onClose }: EditModalProps) {
 }
 
 // ─── Mobile card row ──────────────────────────────────────────────────────────
-// Replaces the wide table on small screens with a stacked card layout
 
 function MobileCardRow({
   card,
@@ -381,14 +361,12 @@ function MobileCardRow({
         onChange={onSelect}
       />
       <div className="flex-1 min-w-0" onClick={onEdit}>
-        {/* Name + set */}
         <div className="flex items-start justify-between gap-2 mb-1">
           <span className="font-medium text-sm leading-tight">{card.Name}</span>
           <span className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase shrink-0">
             {card["Set code"]}
           </span>
         </div>
-        {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
           <span className="flex items-center capitalize">
             <RarityPip rarity={card.Rarity} />
@@ -408,7 +386,6 @@ function MobileCardRow({
           </span>
         </div>
       </div>
-      {/* Price + delete */}
       <div className="flex flex-col items-end justify-between shrink-0">
         <span className="text-xs text-neutral-500 tabular-nums">
           {card["Purchase price"]
@@ -426,6 +403,72 @@ function MobileCardRow({
   );
 }
 
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+function Pagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  const pages: (number | "…")[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (page > 3) pages.push("…");
+    for (
+      let i = Math.max(2, page - 1);
+      i <= Math.min(totalPages - 1, page + 1);
+      i++
+    )
+      pages.push(i);
+    if (page < totalPages - 2) pages.push("…");
+    pages.push(totalPages);
+  }
+  const btnCls = (active: boolean) =>
+    `min-w-[32px] h-8 px-2 rounded text-sm transition-colors ${active ? "bg-violet-600 text-white font-semibold" : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"}`;
+  return (
+    <div className="flex items-center gap-1 px-4 sm:px-6 py-2.5 border-t border-white/10 bg-neutral-900">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page === 1}
+        className="h-8 px-3 text-sm text-neutral-400 hover:text-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        ← Prev
+      </button>
+      <div className="flex items-center gap-1 mx-1">
+        {pages.map((p, i) =>
+          p === "…" ? (
+            <span key={`el-${i}`} className="px-1 text-neutral-600">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onChange(p as number)}
+              className={btnCls(p === page)}
+            >
+              {p}
+            </button>
+          ),
+        )}
+      </div>
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page === totalPages}
+        className="h-8 px-3 text-sm text-neutral-400 hover:text-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        Next →
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CollectionPage() {
@@ -433,8 +476,10 @@ export default function CollectionPage() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   const [sortField, setSortField] = useState<SortField>("Name");
   const [sortAsc, setSortAsc] = useState(true);
+  const [page, setPage] = useState(1);
   const [editRow, setEditRow] = useState<Card | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -443,6 +488,7 @@ export default function CollectionPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/collection.csv")
@@ -465,6 +511,7 @@ export default function CollectionPage() {
       setCards(parseCSV(ev.target?.result as string));
       setSelected(new Set());
       setDirty(false);
+      setPage(1);
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -474,25 +521,21 @@ export default function CollectionPage() {
     setSaving(true);
     setSaveMsg(null);
     try {
-      const csv = toCSV(cards);
-      const blob = new Blob([csv], { type: "text/csv" });
-      const formData = new FormData();
-      formData.append(
+      const blob = new Blob([toCSV(cards)], { type: "text/csv" });
+      const fd = new FormData();
+      fd.append(
         "file",
         new File([blob], "collection.csv", { type: "text/csv" }),
       );
-      const res = await fetch("/api/collection-upload", {
+      const data = await fetch("/api/collection-upload", {
         method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
+        body: fd,
+      }).then((r) => r.json());
       if (data.ok) {
         setDirty(false);
         setSaveMsg("✓ Saved successfully");
         setTimeout(() => setSaveMsg(null), 3000);
-      } else {
-        setSaveMsg(`✗ ${data.error ?? "Save failed"}`);
-      }
+      } else setSaveMsg(`✗ ${data.error ?? "Save failed"}`);
     } catch {
       setSaveMsg("✗ Save failed");
     }
@@ -507,9 +550,9 @@ export default function CollectionPage() {
     }
   };
 
-  const visible = useMemo(() => {
-    const q = search.toLowerCase();
-    const filtered = q
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    const base = q
       ? cards.filter(
           (c) =>
             c.Name.toLowerCase().includes(q) ||
@@ -517,25 +560,30 @@ export default function CollectionPage() {
             c["Set code"].toLowerCase().includes(q),
         )
       : cards;
-
-    return [...filtered].sort((a, b) => {
-      const av = a[sortField] ?? "";
-      const bv = b[sortField] ?? "";
-      if (sortField === "Rarity") {
+    return [...base].sort((a, b) => {
+      const av = a[sortField] ?? "",
+        bv = b[sortField] ?? "";
+      if (sortField === "Rarity")
         return sortAsc
           ? (RARITY_ORDER[av] ?? 0) - (RARITY_ORDER[bv] ?? 0)
           : (RARITY_ORDER[bv] ?? 0) - (RARITY_ORDER[av] ?? 0);
-      }
-      if (sortField === "Quantity" || sortField === "Purchase price") {
+      if (sortField === "Quantity" || sortField === "Purchase price")
         return sortAsc
           ? (parseFloat(av) || 0) - (parseFloat(bv) || 0)
           : (parseFloat(bv) || 0) - (parseFloat(av) || 0);
-      }
       return sortAsc
         ? String(av).localeCompare(String(bv))
         : String(bv).localeCompare(String(av));
     });
-  }, [cards, search, sortField, sortAsc]);
+  }, [cards, debouncedSearch, sortField, sortAsc]);
+
+  // Clamp page to valid range (derived — no effect needed)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const visible = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const stats = useMemo(
     () => ({
@@ -550,6 +598,11 @@ export default function CollectionPage() {
     }),
     [cards],
   );
+
+  const goToPage = (p: number) => {
+    setPage(p);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const openEdit = (row: Card) => {
     setIsNew(false);
@@ -570,7 +623,7 @@ export default function CollectionPage() {
     setDirty(true);
   };
 
-  const deleteRow = (id: string) => {
+  const deleteRow = useCallback((id: string) => {
     setCards((prev) => prev.filter((c) => c._id !== id));
     setSelected((s) => {
       const n = new Set(s);
@@ -578,21 +631,22 @@ export default function CollectionPage() {
       return n;
     });
     setDirty(true);
-  };
+  }, []);
 
   const deleteSelected = () => {
     setCards((prev) => prev.filter((c) => !selected.has(c._id)));
     setSelected(new Set());
     setDirty(true);
   };
-
-  const toggleSelect = (id: string) =>
-    setSelected((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-
+  const toggleSelect = useCallback(
+    (id: string) =>
+      setSelected((s) => {
+        const n = new Set(s);
+        n.has(id) ? n.delete(id) : n.add(id);
+        return n;
+      }),
+    [],
+  );
   const toggleAll = () => {
     if (selected.size === visible.length) setSelected(new Set());
     else setSelected(new Set(visible.map((c) => c._id)));
@@ -609,15 +663,13 @@ export default function CollectionPage() {
       <span className="opacity-30"> ↕</span>
     );
 
-  if (loading) {
+  if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center text-neutral-500 bg-neutral-950">
         Loading collection…
       </div>
     );
-  }
 
-  const bannerVisible = dirty || !!saveMsg;
   const bannerCls = saveMsg?.startsWith("✓")
     ? "bg-emerald-950 border-b border-emerald-800 text-emerald-300"
     : saveMsg
@@ -625,9 +677,11 @@ export default function CollectionPage() {
       : "bg-amber-950 border-b border-amber-800 text-amber-300";
 
   return (
-    <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans">
-      {/* ── Unsaved changes banner ── */}
-      {bannerVisible && (
+    <div
+      ref={topRef}
+      className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans"
+    >
+      {(dirty || !!saveMsg) && (
         <div
           className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium ${bannerCls}`}
         >
@@ -646,7 +700,6 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* ── Header ── */}
       <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-neutral-900 border-b border-white/10">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex gap-1 sm:gap-1.5">
@@ -668,8 +721,6 @@ export default function CollectionPage() {
           </div>
           <span className="text-sm font-semibold">Collection Editor</span>
         </div>
-
-        {/* Desktop nav */}
         <div className="hidden sm:flex gap-2.5">
           <button
             onClick={() => router.push("/")}
@@ -697,8 +748,6 @@ export default function CollectionPage() {
             ↓ Export
           </button>
         </div>
-
-        {/* Mobile menu button */}
         <button
           className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 text-neutral-400"
           onClick={() => setMobileMenuOpen((o) => !o)}
@@ -707,7 +756,6 @@ export default function CollectionPage() {
         </button>
       </header>
 
-      {/* ── Mobile dropdown menu ── */}
       {mobileMenuOpen && (
         <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-neutral-900 border-b border-white/10">
           <button
@@ -747,7 +795,6 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* ── Stats bar ── */}
       <div className="grid grid-cols-2 sm:flex bg-neutral-900 border-b border-white/10">
         {[
           ["unique cards", cards.length],
@@ -769,13 +816,15 @@ export default function CollectionPage() {
         ))}
       </div>
 
-      {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-white/10">
         <input
           className="flex-1 min-w-[160px] bg-neutral-900 border border-white/10 rounded-lg px-3.5 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-violet-500 transition-colors"
           placeholder="Search by name, set…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
         />
         <div className="flex gap-2 ml-auto">
           {selected.size > 0 && (
@@ -786,23 +835,19 @@ export default function CollectionPage() {
               Delete {selected.size}
             </button>
           )}
-          {/*
           <button
             onClick={openNew}
             className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
           >
             + Add
           </button>
-          */}
         </div>
       </div>
 
-      {/* ── Desktop table / Mobile card list ── */}
-
-      {/* Desktop table — hidden on small screens */}
-      <div className="flex-1 overflow-auto hidden sm:block">
+      {/* Desktop table */}
+      <div className="overflow-x-auto hidden sm:block">
         <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-[5]">
+          <thead>
             <tr className="bg-neutral-800">
               <th className="w-9 px-3.5 py-2.5 text-left border-b border-white/10">
                 <input
@@ -823,7 +868,7 @@ export default function CollectionPage() {
                   ["Quantity", "Qty"],
                   [null, "Cond."],
                   [null, "Lang."],
-                  //["Purchase price", "Price"],
+                  ["Purchase price", "Price"],
                 ] as [SortField | null, string][]
               ).map(([field, label]) => (
                 <th
@@ -842,7 +887,7 @@ export default function CollectionPage() {
             {visible.map((card) => (
               <tr
                 key={card._id}
-                // onDoubleClick={() => openEdit(card)}
+                onDoubleClick={() => openEdit(card)}
                 className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-violet-500/8" : "hover:bg-white/[0.03]"}`}
               >
                 <td className="px-3.5 py-2.5">
@@ -886,16 +931,13 @@ export default function CollectionPage() {
                 <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-neutral-500">
                   {card.Language}
                 </td>
-                {/*
                 <td className="px-3.5 py-2.5 text-neutral-500 tabular-nums text-xs">
                   {card["Purchase price"]
                     ? `${card["Purchase price currency"] ?? "EUR"} ${parseFloat(card["Purchase price"]).toFixed(2)}`
                     : "—"}
                 </td>
-                */}
                 <td className="px-3.5 py-2.5">
                   <div className="flex gap-1">
-                    {/*
                     <button
                       onClick={() => openEdit(card)}
                       title="Edit"
@@ -903,7 +945,6 @@ export default function CollectionPage() {
                     >
                       ✎
                     </button>
-                    */}
                     <button
                       onClick={() => deleteRow(card._id)}
                       title="Delete"
@@ -926,15 +967,14 @@ export default function CollectionPage() {
         </table>
       </div>
 
-      {/* Mobile card list — hidden on sm+ */}
-      <div className="flex-1 overflow-auto sm:hidden">
+      {/* Mobile list */}
+      <div className="sm:hidden">
         {visible.length === 0 ? (
           <div className="text-center text-neutral-600 py-16 text-sm">
             No cards match your search.
           </div>
         ) : (
           <>
-            {/* Select all bar */}
             <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 bg-neutral-900/50">
               <input
                 type="checkbox"
@@ -943,7 +983,7 @@ export default function CollectionPage() {
                 onChange={toggleAll}
               />
               <span className="text-xs text-neutral-500">
-                Select all ({visible.length})
+                Select all on this page ({visible.length})
               </span>
             </div>
             {visible.map((card) => (
@@ -960,10 +1000,14 @@ export default function CollectionPage() {
         )}
       </div>
 
-      {/* ── Footer ── */}
+      <Pagination page={safePage} totalPages={totalPages} onChange={goToPage} />
+
       <div className="px-4 sm:px-6 py-2.5 text-xs text-neutral-600 border-t border-white/10 bg-neutral-900">
-        Showing {visible.length} of {cards.length} cards
-        {search && ` · filtered by "${search}"`}
+        Showing {(safePage - 1) * PAGE_SIZE + 1}–
+        {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}{" "}
+        cards
+        {cards.length !== filtered.length && ` (filtered from ${cards.length})`}
+        {search && ` · "${search}"`}
       </div>
 
       {editRow && (
