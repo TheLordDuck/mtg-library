@@ -40,7 +40,7 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-function ManaRow({ small = false }: { small?: boolean }) {
+function ManaSymbols({ small = false }: { small?: boolean }) {
   const symbols = [
     { s: "W", bg: "#e8ddb4", fg: "#333" },
     { s: "U", bg: "#0e68ab", fg: "#fff" },
@@ -49,7 +49,7 @@ function ManaRow({ small = false }: { small?: boolean }) {
     { s: "G", bg: "#00743e", fg: "#fff" },
   ];
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex gap-1.5 items-center">
       {symbols.map(({ s, bg, fg }) => (
         <span
           key={s}
@@ -69,6 +69,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchMeta = () => {
@@ -122,50 +123,48 @@ export default function DashboardPage() {
     a.click();
   };
 
-  // ── Loading ──
   if (loading) {
     return (
       <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4 bg-neutral-950"
+        className="min-h-screen flex flex-col items-center justify-center gap-4"
         style={{
           background:
             "radial-gradient(ellipse 80% 60% at 50% 40%, #1a0e2e, #0a0a0f)",
         }}
       >
-        <ManaRow />
-        <p className="text-neutral-500">Loading…</p>
+        <ManaSymbols />
+        <p className="text-neutral-500 text-sm">Loading…</p>
       </div>
     );
   }
 
-  // ── No file ──
   if (!meta?.exists) {
     return (
       <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-10"
+        className="min-h-screen flex flex-col items-center justify-center gap-5 text-center px-6"
         style={{
           background:
             "radial-gradient(ellipse 80% 60% at 50% 40%, #1a0e2e, #0a0a0f)",
         }}
       >
-        <ManaRow />
-        <h2 className="text-2xl font-bold text-neutral-100">
+        <ManaSymbols />
+        <h2 className="text-xl sm:text-2xl font-bold text-neutral-100">
           No collection file found
         </h2>
-        <p className="text-neutral-500 max-w-sm leading-relaxed">
+        <p className="text-neutral-500 max-w-sm leading-relaxed text-sm">
           Place{" "}
-          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-[0.85em] text-violet-300">
+          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-violet-300">
             collection.csv
           </code>{" "}
           in{" "}
-          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-[0.85em] text-violet-300">
+          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-violet-300">
             /public
           </code>
           , or import one now.
         </p>
         <button
           onClick={() => fileRef.current?.click()}
-          className="mt-2 px-8 py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg text-base transition-colors"
+          className="w-full max-w-xs py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg transition-colors"
         >
           Import CSV
         </button>
@@ -180,36 +179,21 @@ export default function DashboardPage() {
     );
   }
 
-  const metaItems = [
-    { label: "File size", value: formatBytes(meta.size), sub: null },
-    { label: "Cards (rows)", value: meta.rows, sub: null },
-    { label: "Columns", value: meta.columns, sub: null },
-    {
-      label: "Last modified",
-      value: formatDate(meta.lastModified),
-      sub: timeAgo(meta.lastModified),
-    },
-    {
-      label: "Created",
-      value: formatDate(meta.created),
-      sub: timeAgo(meta.created),
-    },
-    { label: "Format", value: "ManaBox CSV", sub: "UTF-8, comma-separated" },
-  ];
-
   return (
     <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 bg-neutral-900 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <ManaRow small />
-          <span className="text-sm font-semibold">Collection Manager</span>
+      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-neutral-900 border-b border-white/10">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ManaSymbols small />
+          <span className="text-sm font-semibold whitespace-nowrap">
+            Collection Manager
+          </span>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="hidden sm:flex items-center gap-2.5">
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50 transition-colors"
           >
             {uploading ? "Uploading…" : "↑ Import CSV"}
           </button>
@@ -226,95 +210,179 @@ export default function DashboardPage() {
           >
             ↓ Download CSV
           </button>
-          {/*
           <button
             onClick={() => router.push("/collection")}
             className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
           >
             Open collection →
           </button>
-          */}
         </div>
+        <button
+          className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 text-neutral-400 shrink-0"
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
       </header>
 
+      {/* Mobile dropdown */}
+      {menuOpen && (
+        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-neutral-900 border-b border-white/10">
+          <button
+            onClick={() => {
+              fileRef.current?.click();
+              setMenuOpen(false);
+            }}
+            disabled={uploading}
+            className="w-full py-3 text-sm border border-white/10 rounded-lg text-neutral-300 text-left px-4 disabled:opacity-50"
+          >
+            {uploading ? "Uploading…" : "↑ Import CSV"}
+          </button>
+          <button
+            onClick={() => {
+              handleDownload();
+              setMenuOpen(false);
+            }}
+            className="w-full py-3 text-sm border border-white/10 rounded-lg text-neutral-300 text-left px-4"
+          >
+            ↓ Download CSV
+          </button>
+          <button
+            onClick={() => router.push("/collection")}
+            className="w-full py-3 text-sm bg-violet-600 text-white rounded-lg font-medium text-left px-4"
+          >
+            Open collection →
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImport}
+            hidden
+          />
+        </div>
+      )}
+
       {/* ── Content ── */}
-      <div className="flex-1 w-full max-w-2xl mx-auto px-6 py-10 flex flex-col gap-6">
-        {/* Upload feedback */}
+      <div className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-4 sm:gap-6">
         {uploadMsg && (
           <div
-            className={`px-4 py-2.5 rounded-lg text-sm font-medium ${
-              uploadMsg.startsWith("✓")
-                ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
-                : "bg-red-500/10 border border-red-500/30 text-red-400"
-            }`}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium ${uploadMsg.startsWith("✓") ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400"}`}
           >
             {uploadMsg}
           </div>
         )}
 
         {/* File card */}
-        <div className="flex items-center gap-4 bg-neutral-900 border border-white/10 rounded-xl p-5">
-          <div className="shrink-0">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <rect width="40" height="40" rx="8" fill="#22222d" />
-              <path
-                d="M12 8h12l8 8v20a2 2 0 01-2 2H12a2 2 0 01-2-2V10a2 2 0 012-2z"
-                fill="#2e2e3a"
-                stroke="#7c3aed"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M24 8v8h8"
-                stroke="#7c3aed"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-              <path
-                d="M16 22h8M16 26h6"
-                stroke="#a78bfa"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-base font-semibold">{meta.filename}</div>
-            <div className="text-xs text-neutral-500 mt-0.5 font-mono">
-              public/{meta.filename}
+        <div className="bg-neutral-900 border border-white/10 rounded-xl p-4 sm:p-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="shrink-0">
+              <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
+                <rect width="40" height="40" rx="8" fill="#22222d" />
+                <path
+                  d="M12 8h12l8 8v20a2 2 0 01-2 2H12a2 2 0 01-2-2V10a2 2 0 012-2z"
+                  fill="#2e2e3a"
+                  stroke="#7c3aed"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M24 8v8h8"
+                  stroke="#7c3aed"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M16 22h8M16 26h6"
+                  stroke="#a78bfa"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm sm:text-base font-semibold truncate">
+                {meta.filename}
+              </div>
+              <div className="text-xs text-neutral-500 mt-0.5 font-mono truncate">
+                public/{meta.filename}
+              </div>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2">
             <button
               onClick={() => fileRef.current?.click()}
-              className="px-3 py-1.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
+              className="flex-1 sm:flex-none py-2 px-3 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
             >
               Replace
             </button>
             <button
               onClick={handleDownload}
-              className="px-3 py-1.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
+              className="flex-1 sm:flex-none py-2 px-3 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
             >
               Download
             </button>
           </div>
         </div>
 
-        {/* Meta grid */}
-        <div className="grid grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden">
-          {metaItems.map(({ label, value, sub }) => (
+        {/* Stats — 3-col grid on desktop, rows on mobile */}
+        <div className="bg-neutral-900 border border-white/10 rounded-xl overflow-hidden">
+          {/* Top 3 compact stats: always 3-col */}
+          <div className="grid grid-cols-3 gap-px bg-white/10">
+            {[
+              { label: "File size", value: formatBytes(meta.size) },
+              { label: "Cards", value: meta.rows },
+              { label: "Columns", value: meta.columns },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                className="bg-neutral-900 px-4 py-3.5 flex flex-col gap-1"
+              >
+                <span className="text-[10px] uppercase tracking-widest font-semibold text-neutral-500">
+                  {label}
+                </span>
+                <span className="text-lg font-bold text-violet-300 leading-tight">
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div className="h-px bg-white/10" />
+
+          {/* Date rows — full width, stack cleanly on any screen */}
+          {[
+            {
+              label: "Last modified",
+              value: formatDate(meta.lastModified),
+              sub: timeAgo(meta.lastModified),
+            },
+            {
+              label: "Created",
+              value: formatDate(meta.created),
+              sub: timeAgo(meta.created),
+            },
+            {
+              label: "Format",
+              value: "ManaBox CSV",
+              sub: "UTF-8, comma-separated",
+            },
+          ].map(({ label, value, sub }, i, arr) => (
             <div
               key={label}
-              className="bg-neutral-900 px-5 py-4 flex flex-col gap-1"
+              className={`flex items-center justify-between gap-4 px-4 py-3.5 bg-neutral-900 ${i < arr.length - 1 ? "border-b border-white/10" : ""}`}
             >
-              <span className="text-[11px] uppercase tracking-widest font-semibold text-neutral-500">
+              <span className="text-[10px] uppercase tracking-widest font-semibold text-neutral-500 shrink-0">
                 {label}
               </span>
-              <span className="text-xl font-bold text-violet-300 leading-tight">
-                {value}
-              </span>
-              {sub && (
-                <span className="text-[11px] text-neutral-600">{sub}</span>
-              )}
+              <div className="flex flex-col items-end gap-0.5 min-w-0">
+                <span className="text-sm font-semibold text-violet-300 text-right">
+                  {value}
+                </span>
+                {sub && (
+                  <span className="text-[10px] text-neutral-600">{sub}</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -322,12 +390,12 @@ export default function DashboardPage() {
         {/* CTA */}
         <div
           onClick={() => router.push("/collection")}
-          className="flex items-center gap-4 bg-neutral-900 border border-white/10 hover:border-violet-500 hover:bg-neutral-800 rounded-xl px-6 py-5 cursor-pointer transition-colors group"
+          className="flex items-center gap-3 sm:gap-4 bg-neutral-900 border border-white/10 hover:border-violet-500 hover:bg-neutral-800 rounded-xl px-4 sm:px-6 py-4 sm:py-5 cursor-pointer transition-colors group"
         >
-          <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-lg shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-base sm:text-lg shrink-0">
             ✎
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-semibold">Edit collection</div>
             <div className="text-xs text-neutral-500 mt-0.5">
               Add, remove, or modify cards. Export when done.

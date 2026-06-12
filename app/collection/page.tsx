@@ -18,7 +18,6 @@ import {
   CONDITION_LABELS,
   CONDITIONS,
   LANGUAGES,
-  EMPTY_CARD,
   type Card,
 } from "@/lib/csv";
 
@@ -36,7 +35,129 @@ function useDebounce<T>(value: T, delay = 250): T {
   return debounced;
 }
 
-// ─── Card image tooltip ───────────────────────────────────────────────────────
+// ─── Normalize helper ─────────────────────────────────────────────────────────
+// Strips/replaces special characters so "opts resolution" matches "Opt's Resolution"
+
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD") // decompose accented chars
+    .replace(/[\u0300-\u036f]/g, "") // strip accent marks
+    .replace(/['''`]/g, "") // strip apostrophes
+    .replace(/[^a-z0-9\s]/g, " ") // replace other special chars with space
+    .replace(/\s+/g, " ") // collapse multiple spaces
+    .trim();
+}
+
+// ─── Scryfall types ───────────────────────────────────────────────────────────
+
+interface ScryfallCard {
+  id: string;
+  name: string;
+  set: string;
+  set_name: string;
+  collector_number: string;
+  rarity: string;
+  foil: boolean;
+  nonfoil: boolean;
+  lang: string;
+  image_uris?: { normal: string };
+  card_faces?: { image_uris?: { normal: string } }[];
+}
+
+// ─── Fullscreen image overlay ─────────────────────────────────────────────────
+
+function ImageOverlay({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-6"
+      onClick={onClose}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="max-h-[85vh] max-w-[90vw] rounded-2xl shadow-2xl"
+      />
+      <button
+        className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white text-lg"
+        onClick={onClose}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+// ─── Set icon overlay ─────────────────────────────────────────────────────────
+
+const setIconCache: Record<string, string> = {};
+
+function SetIconOverlay({
+  setCode,
+  onClose,
+}: {
+  setCode: string;
+  onClose: () => void;
+}) {
+  const [iconUrl, setIconUrl] = useState<string | null>(
+    setIconCache[setCode] ?? null,
+  );
+  useEffect(() => {
+    if (!iconUrl) {
+      fetch(`https://api.scryfall.com/sets/${setCode.toLowerCase()}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.icon_svg_uri) {
+            setIconCache[setCode] = d.icon_svg_uri;
+            setIconUrl(d.icon_svg_uri);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [setCode, iconUrl]);
+  return (
+    <div
+      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col items-center gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {iconUrl ? (
+          <img
+            src={iconUrl}
+            alt={setCode}
+            className="w-32 h-32 invert opacity-90"
+          />
+        ) : (
+          <div className="w-32 h-32 flex items-center justify-center text-neutral-500 text-2xl">
+            …
+          </div>
+        )}
+        <span className="text-white font-bold text-lg uppercase tracking-wider">
+          {setCode}
+        </span>
+        <button
+          className="px-4 py-2 text-sm border border-white/20 rounded-lg text-neutral-300"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desktop tooltips ─────────────────────────────────────────────────────────
 
 function CardTooltip({
   scryfallId,
@@ -73,10 +194,6 @@ function CardTooltip({
     </>
   );
 }
-
-// ─── Set icon tooltip ─────────────────────────────────────────────────────────
-
-const setIconCache: Record<string, string> = {};
 
 function SetTooltip({ setCode }: { setCode: string }) {
   const [visible, setVisible] = useState(false);
@@ -137,7 +254,7 @@ function RarityPip({ rarity }: { rarity: string }) {
   );
 }
 
-// ─── Edit Modal ───────────────────────────────────────────────────────────────
+// ─── Edit Modal (simplified) ──────────────────────────────────────────────────
 
 function EditModal({
   row,
@@ -152,8 +269,6 @@ function EditModal({
   const set =
     (f: keyof Card) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm((p) => ({ ...p, [f]: e.target.value }));
-  const toggle = (f: "Misprint" | "Altered") => () =>
-    setForm((p) => ({ ...p, [f]: p[f] === "true" ? "false" : "true" }));
   const inp =
     "bg-neutral-800 border border-white/10 rounded-md px-3 py-2 text-sm text-neutral-100 outline-none focus:border-violet-500 transition-colors w-full";
   const lbl =
@@ -164,74 +279,25 @@ function EditModal({
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[580px] max-h-[92vh] overflow-y-auto flex flex-col"
+        className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[420px] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
           <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
-          <h2 className="text-base font-semibold truncate pr-4">
-            {row.Name || "New Card"}
+        <div className="px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
+          <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold mb-1">
+            Card
+          </p>
+          <h2 className="text-base font-semibold text-neutral-100">
+            {row.Name}
           </h2>
-          <button
-            className="text-neutral-500 hover:text-neutral-200 w-7 h-7 flex items-center justify-center rounded transition-colors shrink-0"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            {row["Set name"]} · #{row["Collector number"]} ·{" "}
+            {row["Set code"].toUpperCase()}
+          </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-5 sm:p-6">
-          <label className={lbl}>
-            Name
-            <input className={inp} value={form.Name} onChange={set("Name")} />
-          </label>
-          <label className={lbl}>
-            Set Code
-            <input
-              className={inp}
-              value={form["Set code"]}
-              onChange={set("Set code")}
-            />
-          </label>
-          <label className={lbl}>
-            Set Name
-            <input
-              className={inp}
-              value={form["Set name"]}
-              onChange={set("Set name")}
-            />
-          </label>
-          <label className={lbl}>
-            Collector #
-            <input
-              className={inp}
-              value={form["Collector number"]}
-              onChange={set("Collector number")}
-            />
-          </label>
-          <label className={lbl}>
-            Foil
-            <select className={inp} value={form.Foil} onChange={set("Foil")}>
-              <option value="normal">Normal</option>
-              <option value="foil">Foil</option>
-              <option value="etched">Etched</option>
-            </select>
-          </label>
-          <label className={lbl}>
-            Rarity
-            <select
-              className={inp}
-              value={form.Rarity}
-              onChange={set("Rarity")}
-            >
-              {Object.keys(RARITY_ORDER).map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="grid grid-cols-2 gap-3.5 p-5 sm:p-6">
           <label className={lbl}>
             Quantity
             <input
@@ -241,6 +307,14 @@ function EditModal({
               value={form.Quantity}
               onChange={set("Quantity")}
             />
+          </label>
+          <label className={lbl}>
+            Foil
+            <select className={inp} value={form.Foil} onChange={set("Foil")}>
+              <option value="normal">Normal</option>
+              <option value="foil">Foil</option>
+              <option value="etched">Etched</option>
+            </select>
           </label>
           <label className={lbl}>
             Condition
@@ -270,66 +344,273 @@ function EditModal({
               ))}
             </select>
           </label>
-          <label className={lbl}>
-            Purchase Price
-            <input
-              className={inp}
-              type="number"
-              step="0.01"
-              value={form["Purchase price"]}
-              onChange={set("Purchase price")}
-            />
-          </label>
-          <label className={lbl}>
-            Currency
-            <input
-              className={inp}
-              value={form["Purchase price currency"]}
-              onChange={set("Purchase price currency")}
-            />
-          </label>
-          <label className={lbl}>
-            ManaBox ID
-            <input
-              className={inp}
-              value={form["ManaBox ID"]}
-              onChange={set("ManaBox ID")}
-            />
-          </label>
-          <label className={`${lbl} sm:col-span-2`}>
-            Scryfall ID
-            <input
-              className={inp}
-              value={form["Scryfall ID"]}
-              onChange={set("Scryfall ID")}
-            />
-          </label>
-          <div className="sm:col-span-2 flex gap-2.5">
-            {(["Misprint", "Altered"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={toggle(f)}
-                className={`flex-1 py-2.5 rounded-md text-sm border transition-all ${form[f] === "true" ? "bg-violet-500/20 border-violet-500 text-violet-300 font-semibold" : "bg-neutral-800 border-white/10 text-neutral-500"}`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
         </div>
-        <div className="flex justify-end gap-2.5 px-5 py-4 sm:px-6 border-t border-white/10">
+        <div className="flex gap-2.5 px-5 pb-5 sm:px-6 sm:pb-6">
           <button
-            className="flex-1 sm:flex-none px-4 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors"
+            className="flex-1 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
-            className="flex-1 sm:flex-none px-4 py-2.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
+            className="flex-1 py-2.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
             onClick={() => onSave(form)}
           >
-            Save card
+            Save
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Card Modal ───────────────────────────────────────────────────────────
+
+function AddCardModal({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (card: Card) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 400);
+  const [results, setResults] = useState<ScryfallCard[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<ScryfallCard | null>(null);
+  const [foil, setFoil] = useState<"normal" | "foil">("normal");
+  const [condition, setCondition] = useState("near_mint");
+  const [language, setLanguage] = useState("en");
+  const [quantity, setQuantity] = useState("1");
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    // Normalize the query and use name: prefix with ^ for starts-with on Scryfall
+    const normalized = normalize(q);
+    const scryfallQ = `name:/^${normalized.replace(/\s+/g, ".*")}/`;
+    fetch(
+      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(scryfallQ)}&unique=prints&order=released`,
+    )
+      .then((r) => r.json())
+      .then((d) => {
+        setResults(d.data ?? []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setResults([]);
+        setLoading(false);
+      });
+  }, [debouncedQuery]);
+
+  const getImg = (c: ScryfallCard) =>
+    c.image_uris?.normal ?? c.card_faces?.[0]?.image_uris?.normal ?? "";
+
+  const handleAdd = () => {
+    if (!selected) return;
+    const card: Card = {
+      _id: crypto.randomUUID(),
+      Name: selected.name,
+      "Set code": selected.set.toUpperCase(),
+      "Set name": selected.set_name,
+      "Collector number": selected.collector_number,
+      Foil: foil,
+      Rarity: selected.rarity,
+      Quantity: quantity,
+      "ManaBox ID": "",
+      "Scryfall ID": selected.id,
+      "Purchase price": "",
+      Misprint: "false",
+      Altered: "false",
+      Condition: condition,
+      Language: language,
+      "Purchase price currency": "EUR",
+      Added: new Date().toISOString(),
+    };
+    onAdd(card);
+    onClose();
+  };
+
+  const inp =
+    "bg-neutral-800 border border-white/10 rounded-md px-3 py-2 text-sm text-neutral-100 outline-none focus:border-violet-500 transition-colors w-full";
+  const lbl =
+    "flex flex-col gap-1.5 text-[11px] uppercase tracking-widest text-neutral-500 font-semibold";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5"
+      onClick={onClose}
+    >
+      <div
+        className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[640px] max-h-[92vh] overflow-y-auto flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
+        </div>
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
+          <h2 className="text-base font-semibold">
+            {selected ? selected.name : "Add Card"}
+          </h2>
+          <button
+            className="text-neutral-500 hover:text-neutral-200 w-7 h-7 flex items-center justify-center rounded transition-colors"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        {!selected ? (
+          <div className="flex flex-col gap-3 p-5 sm:p-6">
+            <input
+              autoFocus
+              className={inp}
+              placeholder="Search card name…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {loading && (
+              <p className="text-sm text-neutral-500 text-center py-4">
+                Searching…
+              </p>
+            )}
+            {!loading && results.length === 0 && query && (
+              <p className="text-sm text-neutral-600 text-center py-4">
+                No results for "{query}"
+              </p>
+            )}
+            {results.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+                {results.map((c) => {
+                  const img = getImg(c);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelected(c)}
+                      className="flex flex-col gap-1.5 text-left group"
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={c.name}
+                          className="w-full rounded-lg border border-white/5 group-hover:border-violet-500 transition-colors"
+                        />
+                      ) : (
+                        <div className="w-full aspect-[2.5/3.5] rounded-lg bg-neutral-800 border border-white/5 group-hover:border-violet-500 transition-colors flex items-center justify-center text-neutral-600 text-xs p-2 text-center">
+                          {c.name}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-xs font-medium text-neutral-300 leading-tight">
+                          {c.set_name}
+                        </p>
+                        <p className="text-[10px] text-neutral-600">
+                          #{c.collector_number} · {c.rarity}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 p-5 sm:p-6">
+            <div className="flex gap-4">
+              {getImg(selected) && (
+                <img
+                  src={getImg(selected)}
+                  alt={selected.name}
+                  className="w-24 rounded-lg shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">{selected.name}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {selected.set_name} · #{selected.collector_number}
+                </p>
+                <p className="text-xs text-neutral-600 mt-0.5 capitalize">
+                  {selected.rarity}
+                </p>
+                <button
+                  className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  onClick={() => setSelected(null)}
+                >
+                  ← Pick different printing
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className={lbl}>
+                Quantity
+                <input
+                  className={inp}
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </label>
+              <label className={lbl}>
+                Foil
+                <select
+                  className={inp}
+                  value={foil}
+                  onChange={(e) => setFoil(e.target.value as "normal" | "foil")}
+                >
+                  <option value="normal">Normal</option>
+                  {selected.foil && <option value="foil">Foil</option>}
+                </select>
+              </label>
+              <label className={lbl}>
+                Condition
+                <select
+                  className={inp}
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                >
+                  {CONDITIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {CONDITION_LABELS[c]} – {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={lbl}>
+                Language
+                <select
+                  className={inp}
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex gap-2.5">
+              <button
+                className="flex-1 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors"
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
+                onClick={handleAdd}
+              >
+                Add to collection
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -350,56 +631,87 @@ function MobileCardRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [imgOverlay, setImgOverlay] = useState(false);
+  const [setOverlay, setSetOverlay] = useState(false);
+  const scryfallId = card["Scryfall ID"];
+  const imgUrl = scryfallId
+    ? `https://cards.scryfall.io/normal/front/${scryfallId[0]}/${scryfallId[1]}/${scryfallId}.jpg`
+    : null;
+
   return (
-    <div
-      className={`px-4 py-3 border-b border-white/5 flex gap-3 ${selected ? "bg-violet-500/8" : ""}`}
-    >
-      <input
-        type="checkbox"
-        className="accent-violet-500 mt-1 shrink-0"
-        checked={selected}
-        onChange={onSelect}
-      />
-      <div className="flex-1 min-w-0" onClick={onEdit}>
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <span className="font-medium text-sm leading-tight">{card.Name}</span>
-          <span className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase shrink-0">
-            {card["Set code"]}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
-          <span className="flex items-center capitalize">
-            <RarityPip rarity={card.Rarity} />
-            {card.Rarity}
-          </span>
-          {card.Foil !== "normal" && (
-            <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">
-              {card.Foil}
+    <>
+      {imgOverlay && imgUrl && (
+        <ImageOverlay
+          src={imgUrl}
+          alt={card.Name}
+          onClose={() => setImgOverlay(false)}
+        />
+      )}
+      {setOverlay && (
+        <SetIconOverlay
+          setCode={card["Set code"]}
+          onClose={() => setSetOverlay(false)}
+        />
+      )}
+      <div
+        className={`px-4 py-3 border-b border-white/5 flex gap-3 ${selected ? "bg-violet-500/8" : ""}`}
+      >
+        <input
+          type="checkbox"
+          className="accent-violet-500 mt-1 shrink-0"
+          checked={selected}
+          onChange={onSelect}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <button
+              className="font-medium text-sm leading-tight text-left text-neutral-100 active:text-violet-300 transition-colors"
+              onClick={() => imgUrl && setImgOverlay(true)}
+            >
+              {card.Name}
+            </button>
+            <button
+              className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase shrink-0 active:border-violet-400 active:text-violet-300 transition-colors"
+              onClick={() => setSetOverlay(true)}
+            >
+              {card["Set code"]}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+            <span className="flex items-center capitalize">
+              <RarityPip rarity={card.Rarity} />
+              {card.Rarity}
             </span>
-          )}
-          <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">
-            {CONDITION_LABELS[card.Condition] ?? card.Condition}
-          </span>
-          <span className="uppercase tracking-wider">{card.Language}</span>
-          <span className="font-semibold text-violet-300">
-            ×{card.Quantity}
-          </span>
+            {card.Foil !== "normal" && (
+              <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">
+                {card.Foil}
+              </span>
+            )}
+            <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">
+              {CONDITION_LABELS[card.Condition] ?? card.Condition}
+            </span>
+            <span className="uppercase tracking-wider">{card.Language}</span>
+            <span className="font-semibold text-violet-300">
+              ×{card.Quantity}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end justify-between shrink-0 gap-1">
+          <button
+            onClick={onEdit}
+            className="w-7 h-7 flex items-center justify-center rounded text-neutral-500 hover:bg-neutral-800 hover:text-violet-300 transition-colors text-sm"
+          >
+            ✎
+          </button>
+          <button
+            onClick={onDelete}
+            className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm"
+          >
+            ✕
+          </button>
         </div>
       </div>
-      <div className="flex flex-col items-end justify-between shrink-0">
-        <span className="text-xs text-neutral-500 tabular-nums">
-          {card["Purchase price"]
-            ? `€${parseFloat(card["Purchase price"]).toFixed(2)}`
-            : "—"}
-        </span>
-        <button
-          onClick={onDelete}
-          className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -481,7 +793,7 @@ export default function CollectionPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
   const [editRow, setEditRow] = useState<Card | null>(null);
-  const [isNew, setIsNew] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -550,14 +862,15 @@ export default function CollectionPage() {
     }
   };
 
+  // Normalize both query and card fields for fuzzy special-char matching
   const filtered = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
+    const q = normalize(debouncedSearch);
     const base = q
       ? cards.filter(
           (c) =>
-            c.Name.toLowerCase().includes(q) ||
-            c["Set name"].toLowerCase().includes(q) ||
-            c["Set code"].toLowerCase().includes(q),
+            normalize(c.Name).includes(q) ||
+            normalize(c["Set name"]).includes(q) ||
+            normalize(c["Set code"]).includes(q),
         )
       : cards;
     return [...base].sort((a, b) => {
@@ -577,7 +890,6 @@ export default function CollectionPage() {
     });
   }, [cards, debouncedSearch, sortField, sortAsc]);
 
-  // Clamp page to valid range (derived — no effect needed)
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const visible = filtered.slice(
@@ -603,26 +915,16 @@ export default function CollectionPage() {
     setPage(p);
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  const openEdit = (row: Card) => {
-    setIsNew(false);
-    setEditRow({ ...row });
-  };
-  const openNew = () => {
-    setIsNew(true);
-    setEditRow(EMPTY_CARD());
-  };
-
+  const openEdit = (row: Card) => setEditRow({ ...row });
   const handleSave = (updated: Card) => {
-    if (isNew) setCards((prev) => [...prev, updated]);
-    else
-      setCards((prev) =>
-        prev.map((c) => (c._id === updated._id ? updated : c)),
-      );
+    setCards((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
     setEditRow(null);
     setDirty(true);
   };
-
+  const handleAdd = (card: Card) => {
+    setCards((prev) => [...prev, card]);
+    setDirty(true);
+  };
   const deleteRow = useCallback((id: string) => {
     setCards((prev) => prev.filter((c) => c._id !== id));
     setSelected((s) => {
@@ -632,7 +934,6 @@ export default function CollectionPage() {
     });
     setDirty(true);
   }, []);
-
   const deleteSelected = () => {
     setCards((prev) => prev.filter((c) => !selected.has(c._id)));
     setSelected(new Set());
@@ -651,7 +952,6 @@ export default function CollectionPage() {
     if (selected.size === visible.length) setSelected(new Set());
     else setSelected(new Set(visible.map((c) => c._id)));
   };
-
   const SI = ({ field }: { field: SortField }) =>
     sortField === field ? (
       sortAsc ? (
@@ -836,7 +1136,7 @@ export default function CollectionPage() {
             </button>
           )}
           <button
-            onClick={openNew}
+            onClick={() => setShowAdd(true)}
             className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
           >
             + Add
@@ -868,7 +1168,6 @@ export default function CollectionPage() {
                   ["Quantity", "Qty"],
                   [null, "Cond."],
                   [null, "Lang."],
-                  ["Purchase price", "Price"],
                 ] as [SortField | null, string][]
               ).map(([field, label]) => (
                 <th
@@ -931,11 +1230,6 @@ export default function CollectionPage() {
                 <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-neutral-500">
                   {card.Language}
                 </td>
-                <td className="px-3.5 py-2.5 text-neutral-500 tabular-nums text-xs">
-                  {card["Purchase price"]
-                    ? `${card["Purchase price currency"] ?? "EUR"} ${parseFloat(card["Purchase price"]).toFixed(2)}`
-                    : "—"}
-                </td>
                 <td className="px-3.5 py-2.5">
                   <div className="flex gap-1">
                     <button
@@ -958,7 +1252,7 @@ export default function CollectionPage() {
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={10} className="text-center text-neutral-600 py-16">
+                <td colSpan={9} className="text-center text-neutral-600 py-16">
                   No cards match your search.
                 </td>
               </tr>
@@ -1016,6 +1310,9 @@ export default function CollectionPage() {
           onSave={handleSave}
           onClose={() => setEditRow(null)}
         />
+      )}
+      {showAdd && (
+        <AddCardModal onAdd={handleAdd} onClose={() => setShowAdd(false)} />
       )}
     </div>
   );
