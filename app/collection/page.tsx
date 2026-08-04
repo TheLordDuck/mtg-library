@@ -36,17 +36,34 @@ function useDebounce<T>(value: T, delay = 250): T {
 }
 
 // ─── Normalize helper ─────────────────────────────────────────────────────────
-// Strips/replaces special characters so "opts resolution" matches "Opt's Resolution"
 
 function normalize(s: string): string {
   return s
     .toLowerCase()
-    .normalize("NFD") // decompose accented chars
-    .replace(/[\u0300-\u036f]/g, "") // strip accent marks
-    .replace(/['''`]/g, "") // strip apostrophes
-    .replace(/[^a-z0-9\s]/g, " ") // replace other special chars with space
-    .replace(/\s+/g, " ") // collapse multiple spaces
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['''\u2018\u2019`]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+// ─── Deck list parser ─────────────────────────────────────────────────────────
+// Parses lines like "4 Lightning Bolt" or "4x Lightning Bolt"
+// Returns a map of normalized-name → requested qty
+
+function parseDeckList(text: string): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(\d+)x?\s+(.+)$/i);
+    if (!m) continue;
+    const qty = parseInt(m[1]);
+    const name = normalize(m[2].trim());
+    if (name) map.set(name, (map.get(name) ?? 0) + qty);
+  }
+  return map;
 }
 
 // ─── Scryfall types ───────────────────────────────────────────────────────────
@@ -254,7 +271,7 @@ function RarityPip({ rarity }: { rarity: string }) {
   );
 }
 
-// ─── Edit Modal (simplified) ──────────────────────────────────────────────────
+// ─── Edit Modal ───────────────────────────────────────────────────────────────
 
 function EditModal({
   row,
@@ -376,8 +393,7 @@ function AddCardModal({
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 400);
   const [results, setResults] = useState<ScryfallCard[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<ScryfallCard | null>(null);
+  const [picked, setPicked] = useState<ScryfallCard | null>(null);
   const [foil, setFoil] = useState<"normal" | "foil">("normal");
   const [condition, setCondition] = useState("near_mint");
   const [language, setLanguage] = useState("en");
@@ -385,44 +401,42 @@ function AddCardModal({
 
   useEffect(() => {
     const q = debouncedQuery.trim();
-    if (!q) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    // Normalize the query and use name: prefix with ^ for starts-with on Scryfall
+    if (!q) return;
     const normalized = normalize(q);
     const scryfallQ = `name:/^${normalized.replace(/\s+/g, ".*")}/`;
+    let cancelled = false;
     fetch(
       `https://api.scryfall.com/cards/search?q=${encodeURIComponent(scryfallQ)}&unique=prints&order=released`,
     )
       .then((r) => r.json())
       .then((d) => {
-        setResults(d.data ?? []);
-        setLoading(false);
+        if (!cancelled) setResults(d.data ?? []);
       })
       .catch(() => {
-        setResults([]);
-        setLoading(false);
+        if (!cancelled) setResults([]);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedQuery]);
 
+  const displayResults = debouncedQuery.trim() ? results : [];
   const getImg = (c: ScryfallCard) =>
     c.image_uris?.normal ?? c.card_faces?.[0]?.image_uris?.normal ?? "";
 
   const handleAdd = () => {
-    if (!selected) return;
+    if (!picked) return;
     const card: Card = {
       _id: crypto.randomUUID(),
-      Name: selected.name,
-      "Set code": selected.set.toUpperCase(),
-      "Set name": selected.set_name,
-      "Collector number": selected.collector_number,
+      Name: picked.name,
+      "Set code": picked.set.toUpperCase(),
+      "Set name": picked.set_name,
+      "Collector number": picked.collector_number,
       Foil: foil,
-      Rarity: selected.rarity,
+      Rarity: picked.rarity,
       Quantity: quantity,
       "ManaBox ID": "",
-      "Scryfall ID": selected.id,
+      "Scryfall ID": picked.id,
       "Purchase price": "",
       Misprint: "false",
       Altered: "false",
@@ -454,7 +468,7 @@ function AddCardModal({
         </div>
         <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
           <h2 className="text-base font-semibold">
-            {selected ? selected.name : "Add Card"}
+            {picked ? picked.name : "Add Card"}
           </h2>
           <button
             className="text-neutral-500 hover:text-neutral-200 w-7 h-7 flex items-center justify-center rounded transition-colors"
@@ -464,7 +478,7 @@ function AddCardModal({
           </button>
         </div>
 
-        {!selected ? (
+        {!picked ? (
           <div className="flex flex-col gap-3 p-5 sm:p-6">
             <input
               autoFocus
@@ -473,24 +487,27 @@ function AddCardModal({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            {loading && (
+            {query !== debouncedQuery && (
               <p className="text-sm text-neutral-500 text-center py-4">
                 Searching…
               </p>
             )}
-            {!loading && results.length === 0 && query && (
-              <p className="text-sm text-neutral-600 text-center py-4">
-                No results for "{query}"
-              </p>
-            )}
-            {results.length > 0 && (
+            {query === debouncedQuery && !query && null}
+            {query === debouncedQuery &&
+              query &&
+              displayResults.length === 0 && (
+                <p className="text-sm text-neutral-600 text-center py-4">
+                  No results for &apos;{query}&apos;
+                </p>
+              )}
+            {displayResults.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto pr-1">
-                {results.map((c) => {
+                {displayResults.map((c) => {
                   const img = getImg(c);
                   return (
                     <button
                       key={c.id}
-                      onClick={() => setSelected(c)}
+                      onClick={() => setPicked(c)}
                       className="flex flex-col gap-1.5 text-left group"
                     >
                       {img ? (
@@ -521,24 +538,24 @@ function AddCardModal({
         ) : (
           <div className="flex flex-col gap-4 p-5 sm:p-6">
             <div className="flex gap-4">
-              {getImg(selected) && (
+              {getImg(picked) && (
                 <img
-                  src={getImg(selected)}
-                  alt={selected.name}
+                  src={getImg(picked)}
+                  alt={picked.name}
                   className="w-24 rounded-lg shrink-0"
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm">{selected.name}</p>
+                <p className="font-semibold text-sm">{picked.name}</p>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  {selected.set_name} · #{selected.collector_number}
+                  {picked.set_name} · #{picked.collector_number}
                 </p>
                 <p className="text-xs text-neutral-600 mt-0.5 capitalize">
-                  {selected.rarity}
+                  {picked.rarity}
                 </p>
                 <button
                   className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setPicked(null)}
                 >
                   ← Pick different printing
                 </button>
@@ -563,7 +580,7 @@ function AddCardModal({
                   onChange={(e) => setFoil(e.target.value as "normal" | "foil")}
                 >
                   <option value="normal">Normal</option>
-                  {selected.foil && <option value="foil">Foil</option>}
+                  {picked.foil && <option value="foil">Foil</option>}
                 </select>
               </label>
               <label className={lbl}>
@@ -624,12 +641,14 @@ function MobileCardRow({
   onSelect,
   onEdit,
   onDelete,
+  deckQty,
 }: {
   card: Card;
   selected: boolean;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  deckQty?: number;
 }) {
   const [imgOverlay, setImgOverlay] = useState(false);
   const [setOverlay, setSetOverlay] = useState(false);
@@ -637,7 +656,6 @@ function MobileCardRow({
   const imgUrl = scryfallId
     ? `https://cards.scryfall.io/normal/front/${scryfallId[0]}/${scryfallId[1]}/${scryfallId}.jpg`
     : null;
-
   return (
     <>
       {imgOverlay && imgUrl && (
@@ -694,6 +712,11 @@ function MobileCardRow({
             <span className="font-semibold text-violet-300">
               ×{card.Quantity}
             </span>
+            {deckQty !== undefined && (
+              <span className="text-amber-400 font-semibold">
+                deck: {deckQty}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end justify-between shrink-0 gap-1">
@@ -799,7 +822,13 @@ export default function CollectionPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Deck filter: null = no filter active
+  const [deckFilter, setDeckFilter] = useState<Map<string, number> | null>(
+    null,
+  );
+  const [deckFileName, setDeckFileName] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const deckRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -827,6 +856,27 @@ export default function CollectionPage() {
     };
     reader.readAsText(file);
     e.target.value = "";
+  };
+
+  const handleDeckFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseDeckList(ev.target?.result as string);
+      setDeckFilter(parsed);
+      setDeckFileName(file.name);
+      setPage(1);
+      setSearch("");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const clearDeckFilter = () => {
+    setDeckFilter(null);
+    setDeckFileName("");
+    setPage(1);
   };
 
   const handleSaveToFile = async () => {
@@ -862,17 +912,24 @@ export default function CollectionPage() {
     }
   };
 
-  // Normalize both query and card fields for fuzzy special-char matching
   const filtered = useMemo(() => {
     const q = normalize(debouncedSearch);
-    const base = q
-      ? cards.filter(
-          (c) =>
-            normalize(c.Name).includes(q) ||
-            normalize(c["Set name"]).includes(q) ||
-            normalize(c["Set code"]).includes(q),
-        )
-      : cards;
+
+    // Start from cards, optionally filtered by deck list
+    let base = cards;
+    if (deckFilter) {
+      base = cards.filter((c) => deckFilter.has(normalize(c.Name)));
+    }
+
+    if (q) {
+      base = base.filter(
+        (c) =>
+          normalize(c.Name).includes(q) ||
+          normalize(c["Set name"]).includes(q) ||
+          normalize(c["Set code"]).includes(q),
+      );
+    }
+
     return [...base].sort((a, b) => {
       const av = a[sortField] ?? "",
         bv = b[sortField] ?? "";
@@ -888,7 +945,7 @@ export default function CollectionPage() {
         ? String(av).localeCompare(String(bv))
         : String(bv).localeCompare(String(av));
     });
-  }, [cards, debouncedSearch, sortField, sortAsc]);
+  }, [cards, debouncedSearch, sortField, sortAsc, deckFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -997,6 +1054,24 @@ export default function CollectionPage() {
               {saving ? "Saving…" : "Save to file"}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Deck filter banner */}
+      {deckFilter && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-950/60 border-b border-amber-800/50 text-amber-300 text-sm">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="text-base">📄</span>
+            <span className="truncate">
+              <span className="font-semibold">{deckFileName}</span>
+            </span>
+          </span>
+          <button
+            onClick={clearDeckFilter}
+            className="shrink-0 text-xs px-2.5 py-1 border border-amber-700 rounded-md hover:bg-amber-900 transition-colors"
+          >
+            ✕ Clear
+          </button>
         </div>
       )}
 
@@ -1135,6 +1210,22 @@ export default function CollectionPage() {
               Delete {selected.size}
             </button>
           )}
+          {/* Deck filter button */}
+          <button
+            onClick={() =>
+              deckFilter ? clearDeckFilter() : deckRef.current?.click()
+            }
+            className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors whitespace-nowrap ${deckFilter ? "bg-amber-600/20 border border-amber-600/50 text-amber-300 hover:bg-amber-600/30" : "border border-white/10 text-neutral-400 hover:border-violet-400 hover:text-violet-300"}`}
+          >
+            {deckFilter ? "✕ Deck" : "📄 Deck"}
+          </button>
+          <input
+            ref={deckRef}
+            type="file"
+            accept=".txt,.dec,.dek"
+            onChange={handleDeckFile}
+            hidden
+          />
           <button
             onClick={() => setShowAdd(true)}
             className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
@@ -1168,12 +1259,13 @@ export default function CollectionPage() {
                   ["Quantity", "Qty"],
                   [null, "Cond."],
                   [null, "Lang."],
+                  ...(deckFilter ? [[null, "Deck"]] : []),
                 ] as [SortField | null, string][]
               ).map(([field, label]) => (
                 <th
                   key={label}
                   onClick={field ? () => toggleSort(field) : undefined}
-                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold text-neutral-500 border-b border-white/10 whitespace-nowrap ${field ? "cursor-pointer select-none hover:text-neutral-200" : ""}`}
+                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-white/10 whitespace-nowrap ${field ? "cursor-pointer select-none hover:text-neutral-200 text-neutral-500" : "text-neutral-500"} ${label === "Deck" ? "text-amber-600" : ""}`}
                 >
                   {label}
                   {field && <SI field={field} />}
@@ -1183,76 +1275,87 @@ export default function CollectionPage() {
             </tr>
           </thead>
           <tbody>
-            {visible.map((card) => (
-              <tr
-                key={card._id}
-                onDoubleClick={() => openEdit(card)}
-                className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-violet-500/8" : "hover:bg-white/[0.03]"}`}
-              >
-                <td className="px-3.5 py-2.5">
-                  <input
-                    type="checkbox"
-                    className="accent-violet-500 w-3.5 h-3.5 cursor-pointer"
-                    checked={selected.has(card._id)}
-                    onChange={() => toggleSelect(card._id)}
-                  />
-                </td>
-                <td className="px-3.5 py-2.5 font-medium">
-                  <CardTooltip
-                    scryfallId={card["Scryfall ID"]}
-                    name={card.Name}
-                  />
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <SetTooltip setCode={card["Set code"]} />
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <span className="flex items-center text-xs capitalize text-neutral-400">
-                    <RarityPip rarity={card.Rarity} />
-                    {card.Rarity}
-                  </span>
-                </td>
-                <td className="px-3.5 py-2.5">
-                  {card.Foil !== "normal" && (
-                    <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">
-                      {card.Foil}
+            {visible.map((card) => {
+              const deckQty = deckFilter?.get(normalize(card.Name));
+              return (
+                <tr
+                  key={card._id}
+                  onDoubleClick={() => openEdit(card)}
+                  className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-violet-500/8" : "hover:bg-white/[0.03]"}`}
+                >
+                  <td className="px-3.5 py-2.5">
+                    <input
+                      type="checkbox"
+                      className="accent-violet-500 w-3.5 h-3.5 cursor-pointer"
+                      checked={selected.has(card._id)}
+                      onChange={() => toggleSelect(card._id)}
+                    />
+                  </td>
+                  <td className="px-3.5 py-2.5 font-medium">
+                    <CardTooltip
+                      scryfallId={card["Scryfall ID"]}
+                      name={card.Name}
+                    />
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    <SetTooltip setCode={card["Set code"]} />
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    <span className="flex items-center text-xs capitalize text-neutral-400">
+                      <RarityPip rarity={card.Rarity} />
+                      {card.Rarity}
                     </span>
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    {card.Foil !== "normal" && (
+                      <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">
+                        {card.Foil}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3.5 py-2.5 text-center font-semibold text-violet-300">
+                    {card.Quantity}
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">
+                      {CONDITION_LABELS[card.Condition] ?? card.Condition}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-neutral-500">
+                    {card.Language}
+                  </td>
+                  {deckFilter && (
+                    <td className="px-3.5 py-2.5 text-center font-semibold text-amber-400 text-sm">
+                      {deckQty ?? "—"}
+                    </td>
                   )}
-                </td>
-                <td className="px-3.5 py-2.5 text-center font-semibold text-violet-300">
-                  {card.Quantity}
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">
-                    {CONDITION_LABELS[card.Condition] ?? card.Condition}
-                  </span>
-                </td>
-                <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-neutral-500">
-                  {card.Language}
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => openEdit(card)}
-                      title="Edit"
-                      className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-violet-300 transition-colors text-sm"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      onClick={() => deleteRow(card._id)}
-                      title="Delete"
-                      className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-3.5 py-2.5">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openEdit(card)}
+                        title="Edit"
+                        className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-violet-300 transition-colors text-sm"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        onClick={() => deleteRow(card._id)}
+                        title="Delete"
+                        className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center text-neutral-600 py-16">
+                <td
+                  colSpan={deckFilter ? 10 : 9}
+                  className="text-center text-neutral-600 py-16"
+                >
                   No cards match your search.
                 </td>
               </tr>
@@ -1288,6 +1391,7 @@ export default function CollectionPage() {
                 onSelect={() => toggleSelect(card._id)}
                 onEdit={() => openEdit(card)}
                 onDelete={() => deleteRow(card._id)}
+                deckQty={deckFilter?.get(normalize(card.Name))}
               />
             ))}
           </>

@@ -13,6 +13,12 @@ interface FileMeta {
   filename: string;
 }
 
+interface BackupFile {
+  filename: string;
+  size: number;
+  created: string;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -70,6 +76,14 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Backup state
+  const [backups, setBackups] = useState<BackupFile[]>([]);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null); // filename being restored
+  const [confirmRestore, setConfirmRestore] = useState<string | null>(null); // filename awaiting confirm
+
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchMeta = () => {
@@ -82,10 +96,21 @@ export default function DashboardPage() {
       .catch(() => setLoading(false));
   };
 
+  const fetchBackups = () => {
+    fetch("/api/backup")
+      .then((r) => r.json())
+      .then((data) => setBackups(data.backups ?? []))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetchMeta();
+    fetchBackups();
     const onVisible = () => {
-      if (document.visibilityState === "visible") fetchMeta();
+      if (document.visibilityState === "visible") {
+        fetchMeta();
+        fetchBackups();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -120,6 +145,63 @@ export default function DashboardPage() {
     const a = document.createElement("a");
     a.href = "/collection.csv";
     a.download = "collection.csv";
+    a.click();
+  };
+
+  const handleManualBackup = () => {
+    setBackingUp(true);
+    setBackupMsg(null);
+    fetch("/api/backup", { method: "POST" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setBackupMsg(`✓ Backup created: ${data.filename}`);
+          setBackups(data.backups ?? []);
+        } else {
+          setBackupMsg(`✗ ${data.error ?? "Backup failed"}`);
+        }
+        setBackingUp(false);
+        setTimeout(() => setBackupMsg(null), 4000);
+      })
+      .catch(() => {
+        setBackupMsg("✗ Backup failed");
+        setBackingUp(false);
+      });
+  };
+
+  const handleRestore = (filename: string) => {
+    setRestoring(filename);
+    setBackupMsg(null);
+    setConfirmRestore(null);
+    fetch("/api/backup/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setBackupMsg(
+            `✓ Restored from ${filename} — current file was backed up automatically`,
+          );
+          fetchMeta();
+          fetchBackups();
+        } else {
+          setBackupMsg(`✗ ${data.error ?? "Restore failed"}`);
+        }
+        setRestoring(null);
+        setTimeout(() => setBackupMsg(null), 6000);
+      })
+      .catch(() => {
+        setBackupMsg("✗ Restore failed");
+        setRestoring(null);
+      });
+  };
+
+  const handleDownloadBackup = (filename: string) => {
+    const a = document.createElement("a");
+    a.href = `/api/backup/download?file=${encodeURIComponent(filename)}`;
+    a.download = filename;
     a.click();
   };
 
@@ -225,7 +307,6 @@ export default function DashboardPage() {
         </button>
       </header>
 
-      {/* Mobile dropdown */}
       {menuOpen && (
         <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-neutral-900 border-b border-white/10">
           <button
@@ -324,9 +405,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Stats — 3-col grid on desktop, rows on mobile */}
+        {/* Stats */}
         <div className="bg-neutral-900 border border-white/10 rounded-xl overflow-hidden">
-          {/* Top 3 compact stats: always 3-col */}
           <div className="grid grid-cols-3 gap-px bg-white/10">
             {[
               { label: "File size", value: formatBytes(meta.size) },
@@ -346,11 +426,7 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-
-          {/* Divider */}
           <div className="h-px bg-white/10" />
-
-          {/* Date rows — full width, stack cleanly on any screen */}
           {[
             {
               label: "Last modified",
@@ -404,6 +480,94 @@ export default function DashboardPage() {
           <div className="ml-auto text-neutral-600 group-hover:text-neutral-400 text-lg shrink-0 transition-colors">
             →
           </div>
+        </div>
+
+        {/* ── Backups ── */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">Backups</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Last 7 daily backups — auto-created at 03:30
+              </p>
+            </div>
+            <button
+              onClick={handleManualBackup}
+              disabled={backingUp}
+              className="px-3 py-1.5 text-xs border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {backingUp ? "Backing up…" : "↑ Backup now"}
+            </button>
+          </div>
+
+          {backupMsg && (
+            <div
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium ${backupMsg.startsWith("✓") ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400"}`}
+            >
+              {backupMsg}
+            </div>
+          )}
+
+          {backups.length === 0 ? (
+            <div className="bg-neutral-900 border border-white/10 rounded-xl px-4 py-6 text-center text-neutral-600 text-sm">
+              No backups yet — click Backup now to create one.
+            </div>
+          ) : (
+            <div className="bg-neutral-900 border border-white/10 rounded-xl overflow-hidden divide-y divide-white/10">
+              {backups.map((b) => {
+                const isRestoring = restoring === b.filename;
+                const isConfirming = confirmRestore === b.filename;
+                const dateLabel = b.filename
+                  .replace("collection-", "")
+                  .replace(".csv", "");
+                return (
+                  <div
+                    key={b.filename}
+                    className="flex items-center gap-3 px-4 py-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-neutral-200">
+                        {dateLabel}
+                      </div>
+                      <div className="text-xs text-neutral-500 mt-0.5">
+                        {formatBytes(b.size)} · {timeAgo(b.created)}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {/* Download backup */}
+
+                      {/* Restore — two-step confirm */}
+                      {isConfirming ? (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => handleRestore(b.filename)}
+                            disabled={isRestoring}
+                            className="py-1.5 px-2.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors disabled:opacity-50"
+                          >
+                            {isRestoring ? "…" : "Confirm"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmRestore(null)}
+                            className="py-1.5 px-2.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:text-neutral-200 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmRestore(b.filename)}
+                          disabled={!!restoring}
+                          className="py-1.5 px-2.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-amber-500 hover:text-amber-400 disabled:opacity-50 transition-colors"
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
