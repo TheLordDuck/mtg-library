@@ -49,19 +49,28 @@ function normalize(s: string): string {
 }
 
 // ─── Deck list parser ─────────────────────────────────────────────────────────
-// Parses lines like "4 Lightning Bolt" or "4x Lightning Bolt"
-// Returns a map of normalized-name → requested qty
+// Handles:
+//   "4 Lightning Bolt" / "4x Lightning Bolt"  → qty 4
+//   "Lightning Bolt"                           → qty 1 (name-only)
+//   "# Mainboard" or "// Comment"             → ignored
 
 function parseDeckList(text: string): Map<string, number> {
   const map = new Map<string, number>();
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const m = line.match(/^(\d+)x?\s+(.+)$/i);
-    if (!m) continue;
-    const qty = parseInt(m[1]);
-    const name = normalize(m[2].trim());
-    if (name) map.set(name, (map.get(name) ?? 0) + qty);
+    if (line.startsWith("#") || line.startsWith("//")) continue;
+    const withQty = line.match(/^(\d+)x?\s+(.+)$/i);
+    if (withQty) {
+      const qty = parseInt(withQty[1]);
+      const name = normalize(withQty[2].trim());
+      if (name) map.set(name, (map.get(name) ?? 0) + qty);
+      continue;
+    }
+    if (/^[a-zA-Z]/.test(line)) {
+      const name = normalize(line);
+      if (name) map.set(name, (map.get(name) ?? 0) + 1);
+    }
   }
   return map;
 }
@@ -492,12 +501,11 @@ function AddCardModal({
                 Searching…
               </p>
             )}
-            {query === debouncedQuery && !query && null}
             {query === debouncedQuery &&
               query &&
               displayResults.length === 0 && (
                 <p className="text-sm text-neutral-600 text-center py-4">
-                  No results for &apos;{query}&apos;
+                  No results for {query}
                 </p>
               )}
             {displayResults.length > 0 && (
@@ -822,11 +830,10 @@ export default function CollectionPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Deck filter: null = no filter active
   const [deckFilter, setDeckFilter] = useState<Map<string, number> | null>(
     null,
   );
-  const [deckFileName, setDeckFileName] = useState<string>("");
+  const [deckFileName, setDeckFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const deckRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
@@ -897,7 +904,9 @@ export default function CollectionPage() {
         setDirty(false);
         setSaveMsg("✓ Saved successfully");
         setTimeout(() => setSaveMsg(null), 3000);
-      } else setSaveMsg(`✗ ${data.error ?? "Save failed"}`);
+      } else {
+        setSaveMsg(`✗ ${data.error ?? "Save failed"}`);
+      }
     } catch {
       setSaveMsg("✗ Save failed");
     }
@@ -914,13 +923,10 @@ export default function CollectionPage() {
 
   const filtered = useMemo(() => {
     const q = normalize(debouncedSearch);
-
-    // Start from cards, optionally filtered by deck list
     let base = cards;
     if (deckFilter) {
       base = cards.filter((c) => deckFilter.has(normalize(c.Name)));
     }
-
     if (q) {
       base = base.filter(
         (c) =>
@@ -929,7 +935,6 @@ export default function CollectionPage() {
           normalize(c["Set code"]).includes(q),
       );
     }
-
     return [...base].sort((a, b) => {
       const av = a[sortField] ?? "",
         bv = b[sortField] ?? "";
@@ -972,16 +977,20 @@ export default function CollectionPage() {
     setPage(p);
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
   const openEdit = (row: Card) => setEditRow({ ...row });
+
   const handleSave = (updated: Card) => {
     setCards((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
     setEditRow(null);
     setDirty(true);
   };
+
   const handleAdd = (card: Card) => {
     setCards((prev) => [...prev, card]);
     setDirty(true);
   };
+
   const deleteRow = useCallback((id: string) => {
     setCards((prev) => prev.filter((c) => c._id !== id));
     setSelected((s) => {
@@ -991,11 +1000,13 @@ export default function CollectionPage() {
     });
     setDirty(true);
   }, []);
+
   const deleteSelected = () => {
     setCards((prev) => prev.filter((c) => !selected.has(c._id)));
     setSelected(new Set());
     setDirty(true);
   };
+
   const toggleSelect = useCallback(
     (id: string) =>
       setSelected((s) => {
@@ -1005,10 +1016,12 @@ export default function CollectionPage() {
       }),
     [],
   );
+
   const toggleAll = () => {
     if (selected.size === visible.length) setSelected(new Set());
     else setSelected(new Set(visible.map((c) => c._id)));
   };
+
   const SI = ({ field }: { field: SortField }) =>
     sortField === field ? (
       sortAsc ? (
@@ -1020,12 +1033,13 @@ export default function CollectionPage() {
       <span className="opacity-30"> ↕</span>
     );
 
-  if (loading)
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-neutral-500 bg-neutral-950">
         Loading collection…
       </div>
     );
+  }
 
   const bannerCls = saveMsg?.startsWith("✓")
     ? "bg-emerald-950 border-b border-emerald-800 text-emerald-300"
@@ -1033,11 +1047,23 @@ export default function CollectionPage() {
       ? "bg-red-950 border-b border-red-800 text-red-300"
       : "bg-amber-950 border-b border-amber-800 text-amber-300";
 
+  const tableHeaders: [SortField | null, string][] = [
+    ["Name", "Name"],
+    ["Set code", "Set"],
+    ["Rarity", "Rarity"],
+    [null, "Foil"],
+    ["Quantity", "Qty"],
+    [null, "Cond."],
+    [null, "Lang."],
+    ...(deckFilter ? ([[null, "Deck"]] as [null, string][]) : []),
+  ];
+
   return (
     <div
       ref={topRef}
       className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans"
     >
+      {/* ── Save banner ── */}
       {(dirty || !!saveMsg) && (
         <div
           className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium ${bannerCls}`}
@@ -1057,13 +1083,17 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* Deck filter banner */}
+      {/* ── Deck filter banner ── */}
       {deckFilter && (
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-950/60 border-b border-amber-800/50 text-amber-300 text-sm">
           <span className="flex items-center gap-2 min-w-0">
             <span className="text-base">📄</span>
             <span className="truncate">
               <span className="font-semibold">{deckFileName}</span>
+              <span className="text-amber-500 ml-2">
+                — {filtered.length} of {deckFilter.size} cards found in
+                collection
+              </span>
             </span>
           </span>
           <button
@@ -1075,6 +1105,7 @@ export default function CollectionPage() {
         </div>
       )}
 
+      {/* ── Header ── */}
       <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-neutral-900 border-b border-white/10">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex gap-1 sm:gap-1.5">
@@ -1170,6 +1201,7 @@ export default function CollectionPage() {
         </div>
       )}
 
+      {/* ── Stats bar ── */}
       <div className="grid grid-cols-2 sm:flex bg-neutral-900 border-b border-white/10">
         {[
           ["unique cards", cards.length],
@@ -1191,6 +1223,7 @@ export default function CollectionPage() {
         ))}
       </div>
 
+      {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-white/10">
         <input
           className="flex-1 min-w-[160px] bg-neutral-900 border border-white/10 rounded-lg px-3.5 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-violet-500 transition-colors"
@@ -1210,12 +1243,15 @@ export default function CollectionPage() {
               Delete {selected.size}
             </button>
           )}
-          {/* Deck filter button */}
           <button
             onClick={() =>
               deckFilter ? clearDeckFilter() : deckRef.current?.click()
             }
-            className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors whitespace-nowrap ${deckFilter ? "bg-amber-600/20 border border-amber-600/50 text-amber-300 hover:bg-amber-600/30" : "border border-white/10 text-neutral-400 hover:border-violet-400 hover:text-violet-300"}`}
+            className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors whitespace-nowrap ${
+              deckFilter
+                ? "bg-amber-600/20 border border-amber-600/50 text-amber-300 hover:bg-amber-600/30"
+                : "border border-white/10 text-neutral-400 hover:border-violet-400 hover:text-violet-300"
+            }`}
           >
             {deckFilter ? "✕ Deck" : "📄 Deck"}
           </button>
@@ -1235,7 +1271,7 @@ export default function CollectionPage() {
         </div>
       </div>
 
-      {/* Desktop table */}
+      {/* ── Desktop table ── */}
       <div className="overflow-x-auto hidden sm:block">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -1250,22 +1286,15 @@ export default function CollectionPage() {
                   onChange={toggleAll}
                 />
               </th>
-              {(
-                [
-                  ["Name", "Name"],
-                  ["Set code", "Set"],
-                  ["Rarity", "Rarity"],
-                  [null, "Foil"],
-                  ["Quantity", "Qty"],
-                  [null, "Cond."],
-                  [null, "Lang."],
-                  ...(deckFilter ? [[null, "Deck"]] : []),
-                ] as [SortField | null, string][]
-              ).map(([field, label]) => (
+              {tableHeaders.map(([field, label]) => (
                 <th
                   key={label}
                   onClick={field ? () => toggleSort(field) : undefined}
-                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-white/10 whitespace-nowrap ${field ? "cursor-pointer select-none hover:text-neutral-200 text-neutral-500" : "text-neutral-500"} ${label === "Deck" ? "text-amber-600" : ""}`}
+                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-white/10 whitespace-nowrap ${
+                    field
+                      ? "cursor-pointer select-none hover:text-neutral-200 text-neutral-500"
+                      : "text-neutral-500"
+                  } ${label === "Deck" ? "text-amber-600" : ""}`}
                 >
                   {label}
                   {field && <SI field={field} />}
@@ -1353,7 +1382,7 @@ export default function CollectionPage() {
             {visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={deckFilter ? 10 : 9}
+                  colSpan={tableHeaders.length + 2}
                   className="text-center text-neutral-600 py-16"
                 >
                   No cards match your search.
@@ -1364,7 +1393,7 @@ export default function CollectionPage() {
         </table>
       </div>
 
-      {/* Mobile list */}
+      {/* ── Mobile list ── */}
       <div className="sm:hidden">
         {visible.length === 0 ? (
           <div className="text-center text-neutral-600 py-16 text-sm">
@@ -1398,6 +1427,7 @@ export default function CollectionPage() {
         )}
       </div>
 
+      {/* ── Pagination & footer ── */}
       <Pagination page={safePage} totalPages={totalPages} onChange={goToPage} />
 
       <div className="px-4 sm:px-6 py-2.5 text-xs text-neutral-600 border-t border-white/10 bg-neutral-900">
