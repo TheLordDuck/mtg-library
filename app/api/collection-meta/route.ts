@@ -2,14 +2,18 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-export async function GET() {
-  const filePath = path.join(process.cwd(), "public", "collection.csv");
+const FILE_PATH = path.join(process.cwd(), "public", "collection.csv");
 
+export async function GET() {
   try {
-    const stat = fs.statSync(filePath);
-    const content = fs.readFileSync(filePath, "utf-8");
+    if (!fs.existsSync(FILE_PATH)) {
+      return NextResponse.json({ exists: false });
+    }
+
+    const stat = fs.statSync(FILE_PATH);
+    const content = fs.readFileSync(FILE_PATH, "utf-8");
     const lines = content.trim().split(/\r?\n/);
-    const rows = lines.length - 1; // subtract header
+    const rows = lines.length - 1;
 
     return NextResponse.json({
       exists: true,
@@ -21,6 +25,6 @@ export async function GET() {
       filename: "collection.csv",
     });
   } catch {
-    return NextResponse.json({ exists: false }, { status: 404 });
+    return NextResponse.json({ exists: false });
   }
 }
