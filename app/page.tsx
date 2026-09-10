@@ -2,6 +2,11 @@
 
 import { useState, useRef, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Upload, Download, ArrowRight, Menu, X, FileSpreadsheet, Clock, CalendarDays,
+  FileType, PencilLine, History, RotateCcw, Check, AlertTriangle, Loader2,
+} from "lucide-react";
+import { Button, IconButton, Panel, StatTile, Banner } from "@/components/ui";
 
 interface FileMeta {
   exists: boolean;
@@ -59,7 +64,7 @@ function ManaSymbols({ small = false }: { small?: boolean }) {
       {symbols.map(({ s, bg, fg }) => (
         <span
           key={s}
-          className={`rounded-full flex items-center justify-center font-bold shrink-0 ${small ? "w-5 h-5 text-[10px]" : "w-7 h-7 text-xs"}`}
+          className={`rounded-full flex items-center justify-center font-bold shrink-0 ring-1 ring-white/10 ${small ? "w-5 h-5 text-[10px]" : "w-7 h-7 text-xs"}`}
           style={{ background: bg, color: fg }}
         >
           {s}
@@ -128,14 +133,14 @@ export default function DashboardPage() {
       .then((data) => {
         setUploadMsg(
           data.ok
-            ? `✓ Replaced with ${file.name}`
-            : `✗ ${data.error ?? "Upload failed"}`,
+            ? `ok:Replaced with ${file.name}`
+            : `err:${data.error ?? "Upload failed"}`,
         );
         if (data.ok) fetchMeta();
         setUploading(false);
       })
       .catch(() => {
-        setUploadMsg("✗ Upload failed");
+        setUploadMsg("err:Upload failed");
         setUploading(false);
       });
     e.target.value = "";
@@ -155,16 +160,16 @@ export default function DashboardPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
-          setBackupMsg(`✓ Backup created: ${data.filename}`);
+          setBackupMsg(`ok:Backup created — ${data.filename}`);
           setBackups(data.backups ?? []);
         } else {
-          setBackupMsg(`✗ ${data.error ?? "Backup failed"}`);
+          setBackupMsg(`err:${data.error ?? "Backup failed"}`);
         }
         setBackingUp(false);
         setTimeout(() => setBackupMsg(null), 4000);
       })
       .catch(() => {
-        setBackupMsg("✗ Backup failed");
+        setBackupMsg("err:Backup failed");
         setBackingUp(false);
       });
   };
@@ -181,392 +186,238 @@ export default function DashboardPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
-          setBackupMsg(
-            `✓ Restored from ${filename} — current file was backed up automatically`,
-          );
+          setBackupMsg(`ok:Restored from ${filename} — previous file backed up automatically`);
           fetchMeta();
           fetchBackups();
         } else {
-          setBackupMsg(`✗ ${data.error ?? "Restore failed"}`);
+          setBackupMsg(`err:${data.error ?? "Restore failed"}`);
         }
         setRestoring(null);
         setTimeout(() => setBackupMsg(null), 6000);
       })
       .catch(() => {
-        setBackupMsg("✗ Restore failed");
+        setBackupMsg("err:Restore failed");
         setRestoring(null);
       });
   };
 
-  const handleDownloadBackup = (filename: string) => {
-    const a = document.createElement("a");
-    a.href = `/api/backup/download?file=${encodeURIComponent(filename)}`;
-    a.download = filename;
-    a.click();
-  };
-
   if (loading) {
     return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 40%, #1a0e2e, #0a0a0f)",
-        }}
-      >
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <ManaSymbols />
-        <p className="text-neutral-500 text-sm">Loading…</p>
+        <p className="text-text-faint text-sm flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+        </p>
       </div>
     );
   }
 
   if (!meta?.exists) {
     return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center gap-5 text-center px-6"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 40%, #1a0e2e, #0a0a0f)",
-        }}
-      >
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 text-center px-6">
         <ManaSymbols />
-        <h2 className="text-xl sm:text-2xl font-bold text-neutral-100">
-          No collection file found
-        </h2>
-        <p className="text-neutral-500 max-w-sm leading-relaxed text-sm">
-          Place{" "}
-          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-violet-300">
-            collection.csv
-          </code>{" "}
-          in{" "}
-          <code className="bg-neutral-800 border border-white/10 rounded px-1.5 py-0.5 text-violet-300">
-            /public
-          </code>
-          , or import one now.
+        <h2 className="text-xl sm:text-2xl font-bold text-text">No collection file found</h2>
+        <p className="text-text-muted max-w-sm leading-relaxed text-sm">
+          Import a ManaBox <code className="bg-surface border border-border rounded px-1.5 py-0.5 text-accent font-mono text-xs">collection.csv</code> export to get started.
         </p>
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="w-full max-w-xs py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg transition-colors"
-        >
-          Import CSV
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv"
-          onChange={handleImport}
-          hidden
-        />
+        <Button variant="primary" className="w-full max-w-xs py-3.5" onClick={() => fileRef.current?.click()}>
+          <Upload className="w-4 h-4" /> Import CSV
+        </Button>
+        <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
       </div>
     );
   }
 
+  const uploadOk = uploadMsg?.startsWith("ok:");
+  const uploadText = uploadMsg?.replace(/^(ok|err):/, "");
+  const backupOk = backupMsg?.startsWith("ok:");
+  const backupText = backupMsg?.replace(/^(ok|err):/, "");
+
   return (
-    <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans">
+    <div className="flex flex-col min-h-screen">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-neutral-900 border-b border-white/10">
+      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-surface-2/90 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-2 sm:gap-3">
           <ManaSymbols small />
-          <span className="text-sm font-semibold whitespace-nowrap">
-            Collection Manager
-          </span>
+          <span className="text-sm font-semibold whitespace-nowrap">Collection Manager</span>
         </div>
         <div className="hidden sm:flex items-center gap-2.5">
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50 transition-colors"
-          >
-            {uploading ? "Uploading…" : "↑ Import CSV"}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv"
-            onChange={handleImport}
-            hidden
-          />
-          <button
-            onClick={handleDownload}
-            className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors"
-          >
-            ↓ Download CSV
-          </button>
-          <button
-            onClick={() => router.push("/collection")}
-            className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
-          >
-            Open collection →
-          </button>
+          <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {uploading ? "Uploading…" : "Import CSV"}
+          </Button>
+          <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
+          <Button onClick={handleDownload}>
+            <Download className="w-3.5 h-3.5" /> Download CSV
+          </Button>
+          <Button variant="primary" onClick={() => router.push("/collection")}>
+            Open collection <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
         </div>
-        <button
-          className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 text-neutral-400 shrink-0"
-          onClick={() => setMenuOpen((o) => !o)}
-        >
-          {menuOpen ? "✕" : "☰"}
-        </button>
+        <IconButton className="sm:hidden !w-9 !h-9 border border-border" onClick={() => setMenuOpen((o) => !o)}>
+          {menuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </IconButton>
       </header>
 
       {menuOpen && (
-        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-neutral-900 border-b border-white/10">
-          <button
-            onClick={() => {
-              fileRef.current?.click();
-              setMenuOpen(false);
-            }}
+        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-surface-2 border-b border-border">
+          <Button
+            className="w-full justify-start px-4 py-3"
             disabled={uploading}
-            className="w-full py-3 text-sm border border-white/10 rounded-lg text-neutral-300 text-left px-4 disabled:opacity-50"
+            onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}
           >
-            {uploading ? "Uploading…" : "↑ Import CSV"}
-          </button>
-          <button
-            onClick={() => {
-              handleDownload();
-              setMenuOpen(false);
-            }}
-            className="w-full py-3 text-sm border border-white/10 rounded-lg text-neutral-300 text-left px-4"
-          >
-            ↓ Download CSV
-          </button>
-          <button
-            onClick={() => router.push("/collection")}
-            className="w-full py-3 text-sm bg-violet-600 text-white rounded-lg font-medium text-left px-4"
-          >
-            Open collection →
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv"
-            onChange={handleImport}
-            hidden
-          />
+            <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Import CSV"}
+          </Button>
+          <Button className="w-full justify-start px-4 py-3" onClick={() => { handleDownload(); setMenuOpen(false); }}>
+            <Download className="w-3.5 h-3.5" /> Download CSV
+          </Button>
+          <Button variant="primary" className="w-full justify-start px-4 py-3" onClick={() => router.push("/collection")}>
+            Open collection <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
+          <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
         </div>
       )}
 
       {/* ── Content ── */}
       <div className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-4 sm:gap-6">
         {uploadMsg && (
-          <div
-            className={`px-4 py-2.5 rounded-lg text-sm font-medium ${uploadMsg.startsWith("✓") ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400"}`}
-          >
-            {uploadMsg}
-          </div>
+          <Banner tone={uploadOk ? "success" : "danger"}>
+            {uploadOk ? <Check className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />}
+            {uploadText}
+          </Banner>
         )}
 
         {/* File card */}
-        <div className="bg-neutral-900 border border-white/10 rounded-xl p-4 sm:p-5 flex flex-col gap-3">
+        <Panel className="p-4 sm:p-5 flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="shrink-0">
-              <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
-                <rect width="40" height="40" rx="8" fill="#22222d" />
-                <path
-                  d="M12 8h12l8 8v20a2 2 0 01-2 2H12a2 2 0 01-2-2V10a2 2 0 012-2z"
-                  fill="#2e2e3a"
-                  stroke="#7c3aed"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M24 8v8h8"
-                  stroke="#7c3aed"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M16 22h8M16 26h6"
-                  stroke="#a78bfa"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
+            <div className="shrink-0 w-11 h-11 rounded-lg bg-accent-soft border border-accent-border flex items-center justify-center">
+              <FileSpreadsheet className="w-5 h-5 text-accent" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm sm:text-base font-semibold truncate">
-                {meta.filename}
-              </div>
-              <div className="text-xs text-neutral-500 mt-0.5 font-mono truncate">
-                public/{meta.filename}
-              </div>
+              <div className="text-sm sm:text-base font-semibold truncate">{meta.filename}</div>
+              <div className="text-xs text-text-faint mt-0.5 font-mono truncate">persistent data volume</div>
             </div>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex-1 sm:flex-none py-2 px-3 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
-            >
+            <Button size="sm" className="flex-1 sm:flex-none" onClick={() => fileRef.current?.click()}>
               Replace
-            </button>
-            <button
-              onClick={handleDownload}
-              className="flex-1 sm:flex-none py-2 px-3 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-violet-400 hover:text-violet-300 transition-colors"
-            >
+            </Button>
+            <Button size="sm" className="flex-1 sm:flex-none" onClick={handleDownload}>
               Download
-            </button>
+            </Button>
           </div>
-        </div>
+        </Panel>
 
         {/* Stats */}
-        <div className="bg-neutral-900 border border-white/10 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-3 gap-px bg-white/10">
+        <Panel className="overflow-hidden">
+          <div className="grid grid-cols-3 gap-px bg-border">
             {[
               { label: "File size", value: formatBytes(meta.size) },
               { label: "Cards", value: meta.rows },
               { label: "Columns", value: meta.columns },
             ].map(({ label, value }) => (
-              <div
-                key={label}
-                className="bg-neutral-900 px-4 py-3.5 flex flex-col gap-1"
-              >
-                <span className="text-[10px] uppercase tracking-widest font-semibold text-neutral-500">
-                  {label}
-                </span>
-                <span className="text-lg font-bold text-violet-300 leading-tight">
-                  {value}
-                </span>
+              <div key={label} className="bg-surface px-4 py-3.5">
+                <StatTile label={label} value={value} />
               </div>
             ))}
           </div>
-          <div className="h-px bg-white/10" />
+          <div className="h-px bg-border" />
           {[
-            {
-              label: "Last modified",
-              value: formatDate(meta.lastModified),
-              sub: timeAgo(meta.lastModified),
-            },
-            {
-              label: "Created",
-              value: formatDate(meta.created),
-              sub: timeAgo(meta.created),
-            },
-            {
-              label: "Format",
-              value: "ManaBox CSV",
-              sub: "UTF-8, comma-separated",
-            },
-          ].map(({ label, value, sub }, i, arr) => (
+            { label: "Last modified", icon: <Clock className="w-3 h-3" />, value: formatDate(meta.lastModified), sub: timeAgo(meta.lastModified) },
+            { label: "Created", icon: <CalendarDays className="w-3 h-3" />, value: formatDate(meta.created), sub: timeAgo(meta.created) },
+            { label: "Format", icon: <FileType className="w-3 h-3" />, value: "ManaBox CSV", sub: "UTF-8, comma-separated" },
+          ].map(({ label, icon, value, sub }, i, arr) => (
             <div
               key={label}
-              className={`flex items-center justify-between gap-4 px-4 py-3.5 bg-neutral-900 ${i < arr.length - 1 ? "border-b border-white/10" : ""}`}
+              className={`flex items-center justify-between gap-4 px-4 py-3.5 bg-surface ${i < arr.length - 1 ? "border-b border-border" : ""}`}
             >
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-neutral-500 shrink-0">
+              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-semibold text-text-faint shrink-0">
+                {icon}
                 {label}
               </span>
               <div className="flex flex-col items-end gap-0.5 min-w-0">
-                <span className="text-sm font-semibold text-violet-300 text-right">
-                  {value}
-                </span>
-                {sub && (
-                  <span className="text-[10px] text-neutral-600">{sub}</span>
-                )}
+                <span className="text-sm font-semibold text-accent text-right font-mono">{value}</span>
+                {sub && <span className="text-[10px] text-text-faint">{sub}</span>}
               </div>
             </div>
           ))}
-        </div>
+        </Panel>
 
         {/* CTA */}
-        <div
+        <button
           onClick={() => router.push("/collection")}
-          className="flex items-center gap-3 sm:gap-4 bg-neutral-900 border border-white/10 hover:border-violet-500 hover:bg-neutral-800 rounded-xl px-4 sm:px-6 py-4 sm:py-5 cursor-pointer transition-colors group"
+          className="flex items-center gap-3 sm:gap-4 bg-surface border border-border hover:border-accent-border hover:bg-surface-hover rounded-xl px-4 sm:px-6 py-4 sm:py-5 cursor-pointer transition-colors group text-left"
         >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-base sm:text-lg shrink-0">
-            ✎
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-soft border border-accent-border flex items-center justify-center shrink-0">
+            <PencilLine className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-accent" />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold">Edit collection</div>
-            <div className="text-xs text-neutral-500 mt-0.5">
-              Add, remove, or modify cards. Export when done.
-            </div>
+            <div className="text-xs text-text-faint mt-0.5">Add, remove, or modify cards. Export when done.</div>
           </div>
-          <div className="ml-auto text-neutral-600 group-hover:text-neutral-400 text-lg shrink-0 transition-colors">
-            →
-          </div>
-        </div>
+          <ArrowRight className="ml-auto w-4 h-4 text-text-faint group-hover:text-text-muted shrink-0 transition-colors" />
+        </button>
 
         {/* ── Backups ── */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Backups</h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Last 7 daily backups — auto-created at 03:30
-              </p>
+              <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5 text-text-faint" /> Backups
+              </h2>
+              <p className="text-xs text-text-faint mt-0.5">Last 7 daily backups — auto-created at 03:00</p>
             </div>
-            <button
-              onClick={handleManualBackup}
-              disabled={backingUp}
-              className="px-3 py-1.5 text-xs border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50 transition-colors whitespace-nowrap"
-            >
-              {backingUp ? "Backing up…" : "↑ Backup now"}
-            </button>
+            <Button size="sm" disabled={backingUp} onClick={handleManualBackup}>
+              {backingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {backingUp ? "Backing up…" : "Backup now"}
+            </Button>
           </div>
 
           {backupMsg && (
-            <div
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium ${backupMsg.startsWith("✓") ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400"}`}
-            >
-              {backupMsg}
-            </div>
+            <Banner tone={backupOk ? "success" : "danger"}>
+              {backupOk ? <Check className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />}
+              {backupText}
+            </Banner>
           )}
 
           {backups.length === 0 ? (
-            <div className="bg-neutral-900 border border-white/10 rounded-xl px-4 py-6 text-center text-neutral-600 text-sm">
+            <Panel className="px-4 py-6 text-center text-text-faint text-sm">
               No backups yet — click Backup now to create one.
-            </div>
+            </Panel>
           ) : (
-            <div className="bg-neutral-900 border border-white/10 rounded-xl overflow-hidden divide-y divide-white/10">
+            <Panel className="overflow-hidden divide-y divide-border">
               {backups.map((b) => {
                 const isRestoring = restoring === b.filename;
                 const isConfirming = confirmRestore === b.filename;
-                const dateLabel = b.filename
-                  .replace("collection-", "")
-                  .replace(".csv", "");
+                const dateLabel = b.filename.replace("collection-", "").replace(".csv", "");
                 return (
-                  <div
-                    key={b.filename}
-                    className="flex items-center gap-3 px-4 py-3"
-                  >
+                  <div key={b.filename} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-neutral-200">
-                        {dateLabel}
-                      </div>
-                      <div className="text-xs text-neutral-500 mt-0.5">
+                      <div className="text-sm font-medium text-text">{dateLabel}</div>
+                      <div className="text-xs text-text-faint mt-0.5">
                         {formatBytes(b.size)} · {timeAgo(b.created)}
                       </div>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      {/* Download backup */}
-
-                      {/* Restore — two-step confirm */}
                       {isConfirming ? (
                         <div className="flex gap-1.5">
-                          <button
-                            onClick={() => handleRestore(b.filename)}
-                            disabled={isRestoring}
-                            className="py-1.5 px-2.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors disabled:opacity-50"
-                          >
-                            {isRestoring ? "…" : "Confirm"}
-                          </button>
-                          <button
-                            onClick={() => setConfirmRestore(null)}
-                            className="py-1.5 px-2.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:text-neutral-200 transition-colors"
-                          >
+                          <Button variant="danger" size="sm" disabled={isRestoring} onClick={() => handleRestore(b.filename)}>
+                            {isRestoring ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setConfirmRestore(null)}>
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setConfirmRestore(b.filename)}
-                          disabled={!!restoring}
-                          className="py-1.5 px-2.5 text-xs border border-white/10 rounded-md text-neutral-400 hover:border-amber-500 hover:text-amber-400 disabled:opacity-50 transition-colors"
-                        >
-                          Restore
-                        </button>
+                        <Button size="sm" disabled={!!restoring} onClick={() => setConfirmRestore(b.filename)}>
+                          <RotateCcw className="w-3 h-3" /> Restore
+                        </Button>
                       )}
                     </div>
                   </div>
                 );
               })}
-            </div>
+            </Panel>
           )}
         </div>
       </div>

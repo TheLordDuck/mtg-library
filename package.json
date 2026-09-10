@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.2",
+    "lucide-react": "^1.43.0",
     "next": "16.2.9",
     "node-cron": "^4.6.0",
     "react": "19.2.4",

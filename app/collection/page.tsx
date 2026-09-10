@@ -5,10 +5,16 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft, Upload, Download, Plus, Search, FileText, X, Pencil, Trash2,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Menu,
+  Check, AlertTriangle, Loader2,
+} from "lucide-react";
+import {
   parseCSV, toCSV, downloadCSV,
-  RARITY_ORDER, RARITY_COLOR, CONDITION_LABELS, CONDITIONS, LANGUAGES, EMPTY_CARD,
+  RARITY_ORDER, RARITY_COLOR, CONDITION_LABELS, CONDITIONS, LANGUAGES,
   type Card,
 } from "@/lib/csv";
+import { Button, IconButton, Badge, Input, Select, Label, Banner } from "@/components/ui";
 
 type SortField = keyof Omit<Card, "_id">;
 const PAGE_SIZE = 50;
@@ -84,9 +90,14 @@ interface ScryfallCard {
 
 function ImageOverlay({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-6" onClick={onClose}>
-      <img src={src} alt={alt} className="max-h-[85vh] max-w-[90vw] rounded-2xl shadow-2xl" />
-      <button className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white text-lg" onClick={onClose}>✕</button>
+    <div
+      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-6 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <img src={src} alt={alt} className="max-h-[85vh] max-w-[90vw] rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200" />
+      <IconButton className="absolute top-4 right-4 !w-10 !h-10 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={onClose}>
+        <X className="w-4 h-4" />
+      </IconButton>
     </div>
   );
 }
@@ -106,14 +117,14 @@ function SetIconOverlay({ setCode, onClose }: { setCode: string; onClose: () => 
     }
   }, [setCode, iconUrl]);
   return (
-    <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center animate-in fade-in duration-150" onClick={onClose}>
       <div className="flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
         {iconUrl
           ? <img src={iconUrl} alt={setCode} className="w-32 h-32 invert opacity-90" />
-          : <div className="w-32 h-32 flex items-center justify-center text-neutral-500 text-2xl">…</div>
+          : <div className="w-32 h-32 flex items-center justify-center text-text-faint text-2xl">…</div>
         }
         <span className="text-white font-bold text-lg uppercase tracking-wider">{setCode}</span>
-        <button className="px-4 py-2 text-sm border border-white/20 rounded-lg text-neutral-300" onClick={onClose}>Close</button>
+        <Button size="sm" onClick={onClose}>Close</Button>
       </div>
     </div>
   );
@@ -129,7 +140,7 @@ function CardTooltip({ scryfallId, name }: { scryfallId: string; name: string })
   return (
     <>
       <span
-        className="border-b border-dashed border-white/20 hover:border-violet-400 transition-colors cursor-default"
+        className="border-b border-dashed border-white/20 hover:border-accent hover:text-accent transition-colors cursor-default"
         onMouseEnter={(e) => { setPos({ x: e.clientX, y: e.clientY }); setVisible(true); }}
         onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setVisible(false)}
@@ -150,7 +161,7 @@ function SetTooltip({ setCode }: { setCode: string }) {
   return (
     <>
       <span
-        className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase cursor-default hover:border-violet-400 hover:text-violet-300 transition-colors"
+        className="inline-block bg-white/5 border border-border rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-text-muted uppercase cursor-default hover:border-accent hover:text-accent transition-colors"
         onMouseEnter={(e) => {
           setPos({ x: e.clientX, y: e.clientY }); setVisible(true);
           if (!iconUrl) {
@@ -164,10 +175,10 @@ function SetTooltip({ setCode }: { setCode: string }) {
         onMouseLeave={() => setVisible(false)}
       >{setCode}</span>
       {visible && (
-        <div className="fixed z-50 pointer-events-none bg-neutral-800 border border-white/10 rounded-lg p-2 flex items-center justify-center" style={{ left: pos.x + 12, top: pos.y - 12 }}>
+        <div className="fixed z-50 pointer-events-none bg-surface-2 border border-border rounded-lg p-2 flex items-center justify-center shadow-xl" style={{ left: pos.x + 12, top: pos.y - 12 }}>
           {iconUrl
             ? <img src={iconUrl} alt={setCode} className="w-12 h-12 invert opacity-80" />
-            : <span className="text-neutral-500 px-2 text-lg">…</span>
+            : <span className="text-text-faint px-2 text-lg">…</span>
           }
         </div>
       )}
@@ -185,40 +196,44 @@ function EditModal({ row, onSave, onClose }: { row: Card; onSave: (c: Card) => v
   const [form, setForm] = useState<Card>({ ...row });
   const set = (f: keyof Card) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((p) => ({ ...p, [f]: e.target.value }));
-  const inp = "bg-neutral-800 border border-white/10 rounded-md px-3 py-2 text-sm text-neutral-100 outline-none focus:border-violet-500 transition-colors w-full";
-  const lbl = "flex flex-col gap-1.5 text-[11px] uppercase tracking-widest text-neutral-500 font-semibold";
   return (
-    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5" onClick={onClose}>
-      <div className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[420px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface-2 border border-border rounded-t-2xl sm:rounded-xl w-full sm:max-w-[420px] flex flex-col shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-white/20" /></div>
-        <div className="px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
-          <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold mb-1">Card</p>
-          <h2 className="text-base font-semibold text-neutral-100">{row.Name}</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">{row["Set name"]} · #{row["Collector number"]} · {row["Set code"].toUpperCase()}</p>
+        <div className="px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-border">
+          <p className="text-[11px] uppercase tracking-widest text-text-faint font-semibold mb-1">Card</p>
+          <h2 className="text-base font-semibold text-text">{row.Name}</h2>
+          <p className="text-xs text-text-faint mt-0.5">{row["Set name"]} · #{row["Collector number"]} · {row["Set code"].toUpperCase()}</p>
         </div>
         <div className="grid grid-cols-2 gap-3.5 p-5 sm:p-6">
-          <label className={lbl}>Quantity<input className={inp} type="number" min="1" value={form.Quantity} onChange={set("Quantity")} /></label>
-          <label className={lbl}>Foil
-            <select className={inp} value={form.Foil} onChange={set("Foil")}>
+          <Label>Quantity<Input type="number" min="1" value={form.Quantity} onChange={set("Quantity")} /></Label>
+          <Label>Foil
+            <Select value={form.Foil} onChange={set("Foil")}>
               <option value="normal">Normal</option>
               <option value="foil">Foil</option>
               <option value="etched">Etched</option>
-            </select>
-          </label>
-          <label className={lbl}>Condition
-            <select className={inp} value={form.Condition} onChange={set("Condition")}>
+            </Select>
+          </Label>
+          <Label>Condition
+            <Select value={form.Condition} onChange={set("Condition")}>
               {CONDITIONS.map((c) => <option key={c} value={c}>{CONDITION_LABELS[c]} – {c}</option>)}
-            </select>
-          </label>
-          <label className={lbl}>Language
-            <select className={inp} value={form.Language} onChange={set("Language")}>
+            </Select>
+          </Label>
+          <Label>Language
+            <Select value={form.Language} onChange={set("Language")}>
               {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Label>
         </div>
         <div className="flex gap-2.5 px-5 pb-5 sm:px-6 sm:pb-6">
-          <button className="flex-1 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors" onClick={onClose}>Cancel</button>
-          <button className="flex-1 py-2.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors" onClick={() => onSave(form)}>Save</button>
+          <Button className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" className="flex-1" onClick={() => onSave(form)}>Save</Button>
         </div>
       </div>
     </div>
@@ -278,24 +293,34 @@ function AddCardModal({ onAdd, onClose }: { onAdd: (card: Card) => void; onClose
     onClose();
   };
 
-  const inp = "bg-neutral-800 border border-white/10 rounded-md px-3 py-2 text-sm text-neutral-100 outline-none focus:border-violet-500 transition-colors w-full";
-  const lbl = "flex flex-col gap-1.5 text-[11px] uppercase tracking-widest text-neutral-500 font-semibold";
-
   return (
-    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5" onClick={onClose}>
-      <div className="bg-neutral-900 border border-white/10 rounded-t-2xl sm:rounded-xl w-full sm:max-w-[640px] max-h-[92vh] overflow-y-auto flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-5 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface-2 border border-border rounded-t-2xl sm:rounded-xl w-full sm:max-w-[640px] max-h-[92vh] overflow-y-auto flex flex-col shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-white/20" /></div>
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b border-border">
           <h2 className="text-base font-semibold">{picked ? picked.name : "Add Card"}</h2>
-          <button className="text-neutral-500 hover:text-neutral-200 w-7 h-7 flex items-center justify-center rounded transition-colors" onClick={onClose}>✕</button>
+          <IconButton onClick={onClose}><X className="w-4 h-4" /></IconButton>
         </div>
 
         {!picked ? (
           <div className="flex flex-col gap-3 p-5 sm:p-6">
-            <input autoFocus className={inp} placeholder="Search card name…" value={query} onChange={(e) => setQuery(e.target.value)} />
-            {query !== debouncedQuery && <p className="text-sm text-neutral-500 text-center py-4">Searching…</p>}
+            <div className="relative">
+              <Search className="w-4 h-4 text-text-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input autoFocus className="pl-9" placeholder="Search card name…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            {query !== debouncedQuery && (
+              <p className="text-sm text-text-faint text-center py-4 flex items-center justify-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…
+              </p>
+            )}
             {query === debouncedQuery && query && displayResults.length === 0 && (
-              <p className="text-sm text-neutral-600 text-center py-4">No results for "{query}"</p>
+              <p className="text-sm text-text-faint text-center py-4">No results for &ldquo;{query}&rdquo;</p>
             )}
             {displayResults.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto pr-1">
@@ -304,12 +329,12 @@ function AddCardModal({ onAdd, onClose }: { onAdd: (card: Card) => void; onClose
                   return (
                     <button key={c.id} onClick={() => setPicked(c)} className="flex flex-col gap-1.5 text-left group">
                       {img
-                        ? <img src={img} alt={c.name} className="w-full rounded-lg border border-white/5 group-hover:border-violet-500 transition-colors" />
-                        : <div className="w-full aspect-[2.5/3.5] rounded-lg bg-neutral-800 border border-white/5 group-hover:border-violet-500 transition-colors flex items-center justify-center text-neutral-600 text-xs p-2 text-center">{c.name}</div>
+                        ? <img src={img} alt={c.name} className="w-full rounded-lg border border-white/5 group-hover:border-accent-border transition-colors" />
+                        : <div className="w-full aspect-[2.5/3.5] rounded-lg bg-surface border border-white/5 group-hover:border-accent-border transition-colors flex items-center justify-center text-text-faint text-xs p-2 text-center">{c.name}</div>
                       }
                       <div>
-                        <p className="text-xs font-medium text-neutral-300 leading-tight">{c.set_name}</p>
-                        <p className="text-[10px] text-neutral-600">#{c.collector_number} · {c.rarity}</p>
+                        <p className="text-xs font-medium text-text-muted leading-tight">{c.set_name}</p>
+                        <p className="text-[10px] text-text-faint">#{c.collector_number} · {c.rarity}</p>
                       </div>
                     </button>
                   );
@@ -323,33 +348,33 @@ function AddCardModal({ onAdd, onClose }: { onAdd: (card: Card) => void; onClose
               {getImg(picked) && <img src={getImg(picked)} alt={picked.name} className="w-24 rounded-lg shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm">{picked.name}</p>
-                <p className="text-xs text-neutral-500 mt-0.5">{picked.set_name} · #{picked.collector_number}</p>
-                <p className="text-xs text-neutral-600 mt-0.5 capitalize">{picked.rarity}</p>
-                <button className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors" onClick={() => setPicked(null)}>← Pick different printing</button>
+                <p className="text-xs text-text-faint mt-0.5">{picked.set_name} · #{picked.collector_number}</p>
+                <p className="text-xs text-text-faint mt-0.5 capitalize">{picked.rarity}</p>
+                <button className="mt-2 text-xs text-accent hover:text-accent-hover transition-colors" onClick={() => setPicked(null)}>← Pick different printing</button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <label className={lbl}>Quantity<input className={inp} type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label>
-              <label className={lbl}>Foil
-                <select className={inp} value={foil} onChange={(e) => setFoil(e.target.value as "normal" | "foil")}>
+              <Label>Quantity<Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Label>
+              <Label>Foil
+                <Select value={foil} onChange={(e) => setFoil(e.target.value as "normal" | "foil")}>
                   <option value="normal">Normal</option>
                   {picked.foil && <option value="foil">Foil</option>}
-                </select>
-              </label>
-              <label className={lbl}>Condition
-                <select className={inp} value={condition} onChange={(e) => setCondition(e.target.value)}>
+                </Select>
+              </Label>
+              <Label>Condition
+                <Select value={condition} onChange={(e) => setCondition(e.target.value)}>
                   {CONDITIONS.map((c) => <option key={c} value={c}>{CONDITION_LABELS[c]} – {c}</option>)}
-                </select>
-              </label>
-              <label className={lbl}>Language
-                <select className={inp} value={language} onChange={(e) => setLanguage(e.target.value)}>
+                </Select>
+              </Label>
+              <Label>Language
+                <Select value={language} onChange={(e) => setLanguage(e.target.value)}>
                   {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </label>
+                </Select>
+              </Label>
             </div>
             <div className="flex gap-2.5">
-              <button className="flex-1 py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors" onClick={onClose}>Cancel</button>
-              <button className="flex-1 py-2.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors" onClick={handleAdd}>Add to collection</button>
+              <Button className="flex-1" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" className="flex-1" onClick={handleAdd}>Add to collection</Button>
             </div>
           </div>
         )}
@@ -375,31 +400,31 @@ function MobileCardRow({
     <>
       {imgOverlay && imgUrl && <ImageOverlay src={imgUrl} alt={card.Name} onClose={() => setImgOverlay(false)} />}
       {setOverlay && <SetIconOverlay setCode={card["Set code"]} onClose={() => setSetOverlay(false)} />}
-      <div className={`px-4 py-3 border-b border-white/5 flex gap-3 ${selected ? "bg-violet-500/8" : ""}`}>
-        <input type="checkbox" className="accent-violet-500 mt-1 shrink-0" checked={selected} onChange={onSelect} />
+      <div className={`px-4 py-3 border-b border-white/5 flex gap-3 ${selected ? "bg-accent-soft" : ""}`}>
+        <input type="checkbox" className="accent-[var(--color-accent)] mt-1 shrink-0" checked={selected} onChange={onSelect} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
             <button
-              className="font-medium text-sm leading-tight text-left text-neutral-100 active:text-violet-300 transition-colors"
+              className="font-medium text-sm leading-tight text-left text-text active:text-accent transition-colors"
               onClick={() => imgUrl && setImgOverlay(true)}
             >{card.Name}</button>
             <button
-              className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-400 uppercase shrink-0 active:border-violet-400 active:text-violet-300 transition-colors"
+              className="inline-block bg-white/5 border border-border rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-text-muted uppercase shrink-0 active:border-accent active:text-accent transition-colors"
               onClick={() => setSetOverlay(true)}
             >{card["Set code"]}</button>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-faint">
             <span className="flex items-center capitalize"><RarityPip rarity={card.Rarity} />{card.Rarity}</span>
-            {card.Foil !== "normal" && <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">{card.Foil}</span>}
-            <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">{CONDITION_LABELS[card.Condition] ?? card.Condition}</span>
+            {card.Foil !== "normal" && <Badge tone="accent" className="capitalize">{card.Foil}</Badge>}
+            <Badge>{CONDITION_LABELS[card.Condition] ?? card.Condition}</Badge>
             <span className="uppercase tracking-wider">{card.Language}</span>
-            <span className="font-semibold text-violet-300">×{card.Quantity}</span>
-            {deckQty !== undefined && <span className="text-amber-400 font-semibold">deck: {deckQty}</span>}
+            <span className="font-semibold text-accent font-mono">×{card.Quantity}</span>
+            {deckQty !== undefined && <span className="text-warning font-semibold">deck: {deckQty}</span>}
           </div>
         </div>
         <div className="flex flex-col items-end justify-between shrink-0 gap-1">
-          <button onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded text-neutral-500 hover:bg-neutral-800 hover:text-violet-300 transition-colors text-sm">✎</button>
-          <button onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm">✕</button>
+          <IconButton tone="accent" onClick={onEdit}><Pencil className="w-3.5 h-3.5" /></IconButton>
+          <IconButton tone="danger" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></IconButton>
         </div>
       </div>
     </>
@@ -421,17 +446,21 @@ function Pagination({ page, totalPages, onChange }: { page: number; totalPages: 
     pages.push(totalPages);
   }
   const btnCls = (active: boolean) =>
-    `min-w-[32px] h-8 px-2 rounded text-sm transition-colors ${active ? "bg-violet-600 text-white font-semibold" : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"}`;
+    `min-w-[32px] h-8 px-2 rounded text-sm transition-colors ${active ? "bg-accent text-white font-semibold" : "text-text-muted hover:bg-surface-hover hover:text-text"}`;
   return (
-    <div className="flex items-center gap-1 px-4 sm:px-6 py-2.5 border-t border-white/10 bg-neutral-900">
-      <button onClick={() => onChange(page - 1)} disabled={page === 1} className="h-8 px-3 text-sm text-neutral-400 hover:text-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">← Prev</button>
+    <div className="flex items-center gap-1 px-4 sm:px-6 py-2.5 border-t border-border bg-surface-2">
+      <button onClick={() => onChange(page - 1)} disabled={page === 1} className="h-8 px-3 flex items-center gap-1 text-sm text-text-muted hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        <ChevronLeft className="w-3.5 h-3.5" /> Prev
+      </button>
       <div className="flex items-center gap-1 mx-1">
         {pages.map((p, i) => p === "…"
-          ? <span key={`el-${i}`} className="px-1 text-neutral-600">…</span>
+          ? <span key={`el-${i}`} className="px-1 text-text-faint">…</span>
           : <button key={p} onClick={() => onChange(p as number)} className={btnCls(p === page)}>{p}</button>
         )}
       </div>
-      <button onClick={() => onChange(page + 1)} disabled={page === totalPages} className="h-8 px-3 text-sm text-neutral-400 hover:text-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Next →</button>
+      <button onClick={() => onChange(page + 1)} disabled={page === totalPages} className="h-8 px-3 flex items-center gap-1 text-sm text-text-muted hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        Next <ChevronRight className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
@@ -508,13 +537,13 @@ export default function CollectionPage() {
       const data = await fetch("/api/collection-upload", { method: "POST", body: fd }).then((r) => r.json());
       if (data.ok) {
         setDirty(false);
-        setSaveMsg("✓ Saved successfully");
+        setSaveMsg("ok:Saved successfully");
         setTimeout(() => setSaveMsg(null), 3000);
       } else {
-        setSaveMsg(`✗ ${data.error ?? "Save failed"}`);
+        setSaveMsg(`err:${data.error ?? "Save failed"}`);
       }
     } catch {
-      setSaveMsg("✗ Save failed");
+      setSaveMsg("err:Save failed");
     }
     setSaving(false);
   };
@@ -596,22 +625,23 @@ export default function CollectionPage() {
     else setSelected(new Set(visible.map((c) => c._id)));
   };
 
-  const SI = ({ field }: { field: SortField }) =>
-    sortField === field ? (sortAsc ? " ↑" : " ↓") : <span className="opacity-30"> ↕</span>;
+  const SI = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ChevronsUpDown className="w-3 h-3 inline ml-1 opacity-30" />;
+    return sortAsc
+      ? <ChevronUp className="w-3 h-3 inline ml-1" />
+      : <ChevronDown className="w-3 h-3 inline ml-1" />;
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-neutral-500 bg-neutral-950">
-        Loading collection…
+      <div className="min-h-screen flex items-center justify-center text-text-faint gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading collection…
       </div>
     );
   }
 
-  const bannerCls = saveMsg?.startsWith("✓")
-    ? "bg-emerald-950 border-b border-emerald-800 text-emerald-300"
-    : saveMsg
-      ? "bg-red-950 border-b border-red-800 text-red-300"
-      : "bg-amber-950 border-b border-amber-800 text-amber-300";
+  const saveTone = saveMsg?.startsWith("ok:") ? "success" : saveMsg ? "danger" : "warning";
+  const saveText = saveMsg?.replace(/^(ok|err):/, "");
 
   const tableHeaders: [SortField | null, string][] = [
     ["Name", "Name"],
@@ -625,106 +655,116 @@ export default function CollectionPage() {
   ];
 
   return (
-    <div ref={topRef} className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 font-sans">
+    <div ref={topRef} className="flex flex-col min-h-screen">
 
       {/* ── Save banner ── */}
       {(dirty || !!saveMsg) && (
-        <div className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium ${bannerCls}`}>
-          <span className="flex-1 min-w-0 text-xs sm:text-sm">
-            {saveMsg ?? "Unsaved changes — won't persist until saved."}
-          </span>
-          {dirty && (
-            <button
-              onClick={handleSaveToFile}
-              disabled={saving}
-              className="shrink-0 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-3.5 py-1.5 rounded-md transition-colors"
-            >
-              {saving ? "Saving…" : "Save to file"}
-            </button>
-          )}
+        <div className="sticky top-0 z-20 px-4 py-2 border-b border-border bg-surface-2/95 backdrop-blur-md">
+          <Banner
+            tone={saveTone}
+            action={dirty && (
+              <Button variant="warning" size="sm" disabled={saving} onClick={handleSaveToFile}>
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {saving ? "Saving…" : "Save to file"}
+              </Button>
+            )}
+          >
+            {saveMsg ? (saveTone === "success" ? <Check className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />) : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />}
+            {saveMsg ? saveText : "Unsaved changes — won't persist until saved."}
+          </Banner>
         </div>
       )}
 
       {/* ── Deck filter banner ── */}
       {deckFilter && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-950/60 border-b border-amber-800/50 text-amber-300 text-sm">
-          <span className="flex items-center gap-2 min-w-0">
-            <span className="text-base">📄</span>
-            <span className="truncate">
-              <span className="font-semibold">{deckFileName}</span>
-              <span className="text-amber-500 ml-2">— {filtered.length} of {deckFilter.size} cards found in collection</span>
-            </span>
-          </span>
-          <button onClick={clearDeckFilter} className="shrink-0 text-xs px-2.5 py-1 border border-amber-700 rounded-md hover:bg-amber-900 transition-colors">✕ Clear</button>
+        <div className="px-4 py-2.5 border-b border-border">
+          <Banner
+            tone="warning"
+            action={
+              <Button variant="warning" size="sm" onClick={clearDeckFilter}>
+                <X className="w-3 h-3" /> Clear
+              </Button>
+            }
+          >
+            <FileText className="w-3.5 h-3.5 inline mr-1.5" />
+            <span className="font-semibold">{deckFileName}</span>
+            <span className="text-warning/70 ml-2">— {filtered.length} of {deckFilter.size} cards found in collection</span>
+          </Banner>
         </div>
       )}
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-neutral-900 border-b border-white/10">
+      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-surface-2/90 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex gap-1 sm:gap-1.5">
             {[["W","#e8ddb4","#333"],["U","#0e68ab","#fff"],["B","#2d2d2d","#fff"],["R","#c3202a","#fff"],["G","#00743e","#fff"]].map(([s,bg,fg]) => (
-              <span key={s} className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background: bg, color: fg }}>{s}</span>
+              <span key={s} className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ring-1 ring-white/10" style={{ background: bg, color: fg }}>{s}</span>
             ))}
           </div>
           <span className="text-sm font-semibold">Collection Editor</span>
         </div>
         <div className="hidden sm:flex gap-2.5">
-          <button onClick={() => router.push("/")} className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-white/20 transition-colors">← Dashboard</button>
-          <button onClick={() => fileRef.current?.click()} className="px-4 py-2 text-sm border border-white/10 rounded-lg text-neutral-300 hover:border-violet-400 hover:text-violet-300 transition-colors">↑ Import</button>
+          <Button onClick={() => router.push("/")}><ArrowLeft className="w-3.5 h-3.5" /> Dashboard</Button>
+          <Button onClick={() => fileRef.current?.click()}><Upload className="w-3.5 h-3.5" /> Import</Button>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} hidden />
-          <button onClick={() => downloadCSV(cards)} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors">↓ Export</button>
+          <Button variant="primary" onClick={() => downloadCSV(cards)}><Download className="w-3.5 h-3.5" /> Export</Button>
         </div>
-        <button className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 text-neutral-400" onClick={() => setMobileMenuOpen((o) => !o)}>
-          {mobileMenuOpen ? "✕" : "☰"}
-        </button>
+        <IconButton className="sm:hidden !w-9 !h-9 border border-border" onClick={() => setMobileMenuOpen((o) => !o)}>
+          {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </IconButton>
       </header>
 
       {mobileMenuOpen && (
-        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-neutral-900 border-b border-white/10">
-          <button onClick={() => { router.push("/"); setMobileMenuOpen(false); }} className="w-full py-2.5 text-sm border border-white/10 rounded-lg text-neutral-400 text-left px-4">← Dashboard</button>
-          <button onClick={() => { fileRef.current?.click(); setMobileMenuOpen(false); }} className="w-full py-2.5 text-sm border border-white/10 rounded-lg text-neutral-300 text-left px-4">↑ Import CSV</button>
-          <button onClick={() => { downloadCSV(cards); setMobileMenuOpen(false); }} className="w-full py-2.5 text-sm bg-violet-600 text-white rounded-lg font-medium text-left px-4">↓ Export CSV</button>
+        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-surface-2 border-b border-border">
+          <Button className="w-full justify-start px-4 py-2.5" onClick={() => { router.push("/"); setMobileMenuOpen(false); }}>
+            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+          </Button>
+          <Button className="w-full justify-start px-4 py-2.5" onClick={() => { fileRef.current?.click(); setMobileMenuOpen(false); }}>
+            <Upload className="w-3.5 h-3.5" /> Import CSV
+          </Button>
+          <Button variant="primary" className="w-full justify-start px-4 py-2.5" onClick={() => { downloadCSV(cards); setMobileMenuOpen(false); }}>
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </Button>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} hidden />
         </div>
       )}
 
       {/* ── Stats bar ── */}
-      <div className="grid grid-cols-2 sm:flex bg-neutral-900 border-b border-white/10">
+      <div className="grid grid-cols-2 sm:flex bg-surface-2 border-b border-border">
         {[["unique cards", cards.length], ["total copies", stats.total], ["sets", stats.sets], ["total value", `€${stats.value.toFixed(2)}`]].map(([label, val]) => (
-          <div key={label as string} className="px-4 sm:px-5 py-2.5 sm:py-3 flex flex-col gap-0.5 border-r border-b sm:border-b-0 border-white/10 last:border-r-0 [&:nth-child(2)]:border-r-0 sm:[&:nth-child(2)]:border-r sm:[&:nth-child(4)]:border-r-0">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">{label}</span>
-            <span className="text-lg sm:text-xl font-bold text-violet-300">{val}</span>
+          <div key={label as string} className="px-4 sm:px-5 py-2.5 sm:py-3 border-r border-b sm:border-b-0 border-border last:border-r-0 [&:nth-child(2)]:border-r-0 sm:[&:nth-child(2)]:border-r sm:[&:nth-child(4)]:border-r-0">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-widest text-text-faint font-semibold block mb-0.5">{label}</span>
+            <span className="text-lg sm:text-xl font-bold text-accent font-mono">{val}</span>
           </div>
         ))}
       </div>
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-white/10">
-        <input
-          className="flex-1 min-w-[160px] bg-neutral-900 border border-white/10 rounded-lg px-3.5 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-violet-500 transition-colors"
-          placeholder="Search by name, set…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-        />
+      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-border">
+        <div className="relative flex-1 min-w-[160px]">
+          <Search className="w-4 h-4 text-text-faint absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Input
+            className="pl-9"
+            placeholder="Search by name, set…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
         <div className="flex gap-2 ml-auto">
           {selected.size > 0 && (
-            <button onClick={deleteSelected} className="px-3 py-2 text-sm bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors whitespace-nowrap">
-              Delete {selected.size}
-            </button>
+            <Button variant="danger" onClick={deleteSelected}>
+              <Trash2 className="w-3.5 h-3.5" /> Delete {selected.size}
+            </Button>
           )}
-          <button
+          <Button
+            variant={deckFilter ? "warning" : "secondary"}
             onClick={() => deckFilter ? clearDeckFilter() : deckRef.current?.click()}
-            className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors whitespace-nowrap ${
-              deckFilter
-                ? "bg-amber-600/20 border border-amber-600/50 text-amber-300 hover:bg-amber-600/30"
-                : "border border-white/10 text-neutral-400 hover:border-violet-400 hover:text-violet-300"
-            }`}
           >
-            {deckFilter ? "✕ Deck" : "📄 Deck"}
-          </button>
+            {deckFilter ? <X className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+            Deck
+          </Button>
           <input ref={deckRef} type="file" accept=".txt,.dec,.dek" onChange={handleDeckFile} hidden />
-          <button onClick={() => setShowAdd(true)} className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors">+ Add</button>
+          <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="w-3.5 h-3.5" /> Add</Button>
         </div>
       </div>
 
@@ -732,22 +772,22 @@ export default function CollectionPage() {
       <div className="overflow-x-auto hidden sm:block">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-neutral-800">
-              <th className="w-9 px-3.5 py-2.5 text-left border-b border-white/10">
-                <input type="checkbox" className="accent-violet-500 w-3.5 h-3.5 cursor-pointer" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
+            <tr className="bg-surface-2">
+              <th className="w-9 px-3.5 py-2.5 text-left border-b border-border">
+                <input type="checkbox" className="accent-[var(--color-accent)] w-3.5 h-3.5 cursor-pointer" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
               </th>
               {tableHeaders.map(([field, label]) => (
                 <th
                   key={label}
                   onClick={field ? () => toggleSort(field) : undefined}
-                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-white/10 whitespace-nowrap ${
-                    field ? "cursor-pointer select-none hover:text-neutral-200 text-neutral-500" : "text-neutral-500"
-                  } ${label === "Deck" ? "text-amber-600" : ""}`}
+                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-border whitespace-nowrap ${
+                    field ? "cursor-pointer select-none hover:text-text text-text-faint" : "text-text-faint"
+                  } ${label === "Deck" ? "text-warning" : ""}`}
                 >
                   {label}{field && <SI field={field} />}
                 </th>
               ))}
-              <th className="w-16 border-b border-white/10" />
+              <th className="w-16 border-b border-border" />
             </tr>
           </thead>
           <tbody>
@@ -757,40 +797,40 @@ export default function CollectionPage() {
                 <tr
                   key={card._id}
                   onDoubleClick={() => openEdit(card)}
-                  className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-violet-500/8" : "hover:bg-white/[0.03]"}`}
+                  className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-accent-soft" : "hover:bg-white/[0.03]"}`}
                 >
                   <td className="px-3.5 py-2.5">
-                    <input type="checkbox" className="accent-violet-500 w-3.5 h-3.5 cursor-pointer" checked={selected.has(card._id)} onChange={() => toggleSelect(card._id)} />
+                    <input type="checkbox" className="accent-[var(--color-accent)] w-3.5 h-3.5 cursor-pointer" checked={selected.has(card._id)} onChange={() => toggleSelect(card._id)} />
                   </td>
                   <td className="px-3.5 py-2.5 font-medium"><CardTooltip scryfallId={card["Scryfall ID"]} name={card.Name} /></td>
                   <td className="px-3.5 py-2.5"><SetTooltip setCode={card["Set code"]} /></td>
                   <td className="px-3.5 py-2.5">
-                    <span className="flex items-center text-xs capitalize text-neutral-400">
+                    <span className="flex items-center text-xs capitalize text-text-muted">
                       <RarityPip rarity={card.Rarity} />{card.Rarity}
                     </span>
                   </td>
                   <td className="px-3.5 py-2.5">
-                    {card.Foil !== "normal" && <span className="bg-violet-500/10 border border-violet-500/30 text-violet-300 rounded px-1.5 py-0.5 text-[11px] capitalize">{card.Foil}</span>}
+                    {card.Foil !== "normal" && <Badge tone="accent" className="capitalize">{card.Foil}</Badge>}
                   </td>
-                  <td className="px-3.5 py-2.5 text-center font-semibold text-violet-300">{card.Quantity}</td>
+                  <td className="px-3.5 py-2.5 text-center font-semibold text-accent font-mono">{card.Quantity}</td>
                   <td className="px-3.5 py-2.5">
-                    <span className="bg-white/5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-neutral-400">{CONDITION_LABELS[card.Condition] ?? card.Condition}</span>
+                    <Badge>{CONDITION_LABELS[card.Condition] ?? card.Condition}</Badge>
                   </td>
-                  <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-neutral-500">{card.Language}</td>
+                  <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-text-faint">{card.Language}</td>
                   {deckFilter && (
-                    <td className="px-3.5 py-2.5 text-center font-semibold text-amber-400 text-sm">{deckQty ?? "—"}</td>
+                    <td className="px-3.5 py-2.5 text-center font-semibold text-warning text-sm">{deckQty ?? "—"}</td>
                   )}
                   <td className="px-3.5 py-2.5">
                     <div className="flex gap-1">
-                      <button onClick={() => openEdit(card)} title="Edit" className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-violet-300 transition-colors text-sm">✎</button>
-                      <button onClick={() => deleteRow(card._id)} title="Delete" className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors text-sm">✕</button>
+                      <IconButton tone="accent" title="Edit" onClick={() => openEdit(card)}><Pencil className="w-3.5 h-3.5" /></IconButton>
+                      <IconButton tone="danger" title="Delete" onClick={() => deleteRow(card._id)}><Trash2 className="w-3.5 h-3.5" /></IconButton>
                     </div>
                   </td>
                 </tr>
               );
             })}
             {visible.length === 0 && (
-              <tr><td colSpan={tableHeaders.length + 2} className="text-center text-neutral-600 py-16">No cards match your search.</td></tr>
+              <tr><td colSpan={tableHeaders.length + 2} className="text-center text-text-faint py-16">No cards match your search.</td></tr>
             )}
           </tbody>
         </table>
@@ -799,12 +839,12 @@ export default function CollectionPage() {
       {/* ── Mobile list ── */}
       <div className="sm:hidden">
         {visible.length === 0
-          ? <div className="text-center text-neutral-600 py-16 text-sm">No cards match your search.</div>
+          ? <div className="text-center text-text-faint py-16 text-sm">No cards match your search.</div>
           : (
             <>
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 bg-neutral-900/50">
-                <input type="checkbox" className="accent-violet-500" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
-                <span className="text-xs text-neutral-500">Select all on this page ({visible.length})</span>
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 bg-surface-2/50">
+                <input type="checkbox" className="accent-[var(--color-accent)]" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
+                <span className="text-xs text-text-faint">Select all on this page ({visible.length})</span>
               </div>
               {visible.map((card) => (
                 <MobileCardRow
@@ -825,7 +865,7 @@ export default function CollectionPage() {
       {/* ── Pagination & footer ── */}
       <Pagination page={safePage} totalPages={totalPages} onChange={goToPage} />
 
-      <div className="px-4 sm:px-6 py-2.5 text-xs text-neutral-600 border-t border-white/10 bg-neutral-900">
+      <div className="px-4 sm:px-6 py-2.5 text-xs text-text-faint border-t border-border bg-surface-2">
         Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} cards
         {cards.length !== filtered.length && ` (filtered from ${cards.length})`}
         {search && ` · "${search}"`}
