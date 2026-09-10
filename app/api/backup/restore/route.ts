@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-
-const COLLECTION_PATH = path.join(process.cwd(), "public", "collection.csv");
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+import { COLLECTION_PATH, BACKUP_DIR } from "@/lib/paths";
 
 export async function POST(req: NextRequest) {
   try {

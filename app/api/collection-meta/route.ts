@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
-import path from "path";
-
-const FILE_PATH = path.join(process.cwd(), "public", "collection.csv");
+import { COLLECTION_PATH as FILE_PATH } from "@/lib/paths";
 
 export async function GET() {
   try {

@@ -143,7 +143,7 @@ export default function DashboardPage() {
 
   const handleDownload = () => {
     const a = document.createElement("a");
-    a.href = "/collection.csv";
+    a.href = "/api/collection-upload";
     a.download = "collection.csv";
     a.click();
   };

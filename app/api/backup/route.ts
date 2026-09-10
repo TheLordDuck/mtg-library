@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { COLLECTION_PATH, BACKUP_DIR, ensureDataDirs } from "@/lib/paths";
 
-const COLLECTION_PATH = path.join(process.cwd(), "public", "collection.csv");
-const BACKUP_DIR = path.join(process.cwd(), "backups");
 const MAX_BACKUPS = 7;
 
 function getBackups() {
@@ -31,9 +30,7 @@ export async function POST() {
       return NextResponse.json({ ok: false, error: "collection.csv not found" }, { status: 404 });
     }
 
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
+    ensureDataDirs();
 
     const date = new Date().toISOString().slice(0, 10);
     const dest = path.join(BACKUP_DIR, `collection-${date}.csv`);

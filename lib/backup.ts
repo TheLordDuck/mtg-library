@@ -1,9 +1,8 @@
 import fs from "fs";
 import path from "path";
 import cron from "node-cron";
+import { COLLECTION_PATH, BACKUP_DIR, ensureDataDirs } from "./paths";
 
-const COLLECTION_PATH = path.join(process.cwd(), "public", "collection.csv");
-const BACKUP_DIR = path.join(process.cwd(), "backups");
 const MAX_BACKUPS = 7;
 
 function runBackup() {
@@ -13,9 +12,7 @@ function runBackup() {
       return;
     }
 
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
+    ensureDataDirs();
 
     // Filename: collection-2026-08-04.csv
     const date = new Date().toISOString().slice(0, 10);

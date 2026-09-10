@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+import { BACKUP_DIR } from "@/lib/paths";
 
 export async function GET(req: NextRequest) {
   const file = req.nextUrl.searchParams.get("file");
