@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MTG Collection Manager
 
-## Getting Started
+A self-hosted web app for managing a Magic: The Gathering card collection exported from [ManaBox](https://manabox.app/). Import your `collection.csv`, browse and edit it in a searchable table, filter it against a decklist to see what you're missing, and keep automatic daily backups — all backed by a single CSV file on disk, no database required.
 
-First, run the development server:
+## Features
+
+- **Dashboard** — collection file stats (size, card/column counts, last modified), CSV import/export, and a backup manager with manual "backup now" and one-click restore.
+- **Collection editor** — searchable, sortable table (desktop) / card list (mobile) of every card, with inline edit and delete, bulk delete, and hover/tap previews of card art and set icons (via the [Scryfall API](https://scryfall.com/docs/api)).
+- **Add cards** — search Scryfall by name, pick a specific printing, and add it with quantity, foil, condition, and language.
+- **Deck check** — upload a decklist (`.txt`/`.dec`/`.dek`, plain `4 Card Name` or `4x Card Name` per line) to filter the collection down to what you own from that deck and see quantities owned per card.
+- **Automatic backups** — a daily cron job snapshots `collection.csv` to `data/backups/`, keeping the last 7 days; snapshots can also be triggered and restored from the dashboard.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org) (App Router) + React 19 + TypeScript
+- Tailwind CSS
+- `node-cron` for scheduled backups
+- Collection data is stored as a flat CSV file on the filesystem — there is no database
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). If no collection file exists yet, you'll be prompted to import a ManaBox `collection.csv` export to get started.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data storage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All runtime data (the collection CSV and its backups) lives under a single directory, controlled by the `DATA_DIR` environment variable:
 
-## Learn More
+- `DATA_DIR/collection.csv` — the active collection
+- `DATA_DIR/backups/collection-YYYY-MM-DD.csv` — daily backups (last 7 kept)
 
-To learn more about Next.js, take a look at the following resources:
+Locally this defaults to `./data` in the repo. **In production, `DATA_DIR` must point at a mounted persistent volume** (e.g. `/data`), otherwise the collection is lost on every redeploy/restart. See `lib/paths.ts` for details.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment (Coolify)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This app is designed to run on [Coolify](https://coolify.io/):
 
-## Deploy on Vercel
+1. Set the `DATA_DIR` environment variable (e.g. `/data`).
+2. Add a persistent storage volume mounted at that same path.
+3. Deploy — the app builds and runs with `pnpm build` / `pnpm start`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command      | Description                          |
+| ------------ | ------------------------------------ |
+| `pnpm dev`   | Start the dev server                 |
+| `pnpm build` | Build for production                 |
+| `pnpm start` | Run the production build             |
+| `pnpm lint`  | Run ESLint                           |
