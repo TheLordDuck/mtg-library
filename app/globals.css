@@ -2,21 +2,22 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  --color-bg: #0a0a0d;
-  --color-surface: #131217;
-  --color-surface-2: #18171e;
-  --color-surface-hover: #1e1d26;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-strong: rgba(255, 255, 255, 0.16);
-  --color-text: #f3f2f7;
-  --color-text-muted: #9d9aab;
-  --color-text-faint: #635f70;
-  --color-accent: #8b5cf6;
-  --color-accent-hover: #7c3aed;
-  --color-accent-soft: rgba(139, 92, 246, 0.12);
-  --color-accent-border: rgba(139, 92, 246, 0.35);
-  --color-success: #34d399;
-  --color-danger: #f87171;
+  --color-bg: #0e0f12;
+  --color-surface: #15161a;
+  --color-surface-2: #121317;
+  --color-surface-hover: #1c1d22;
+  --color-border: #24252b;
+  --color-border-strong: #2e2f36;
+  --color-text: #ece7dc;
+  --color-text-muted: #a39e93;
+  --color-text-faint: #8c877d;
+  --color-accent: #e0b45a;
+  --color-accent-hover: #f0cc80;
+  --color-accent-ink: #17130a;
+  --color-accent-soft: #221d12;
+  --color-accent-border: #4a3c1e;
+  --color-success: #7ddba8;
+  --color-danger: #f6b4a6;
   --color-warning: #fbbf24;
 }
 
@@ -32,13 +33,15 @@
   --color-text-faint: var(--color-text-faint);
   --color-accent: var(--color-accent);
   --color-accent-hover: var(--color-accent-hover);
+  --color-accent-ink: var(--color-accent-ink);
   --color-accent-soft: var(--color-accent-soft);
   --color-accent-border: var(--color-accent-border);
   --color-success: var(--color-success);
   --color-danger: var(--color-danger);
   --color-warning: var(--color-warning);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-serif: var(--font-instrument-serif);
 }
 
 html {
@@ -47,12 +50,6 @@ html {
 
 body {
   background: var(--color-bg);
-  background-image: radial-gradient(
-    ellipse 70% 50% at 50% -10%,
-    rgba(139, 92, 246, 0.1),
-    transparent
-  );
-  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
@@ -63,7 +60,7 @@ body {
 
 ::selection {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-ink);
 }
 
 /* Thin, unobtrusive scrollbars */

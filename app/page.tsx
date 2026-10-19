@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  Upload, Download, ArrowRight, Menu, X, FileSpreadsheet, Clock, CalendarDays,
-  FileType, PencilLine, History, RotateCcw, Check, AlertTriangle, Loader2,
+  Upload, Download, ArrowRight, FileSpreadsheet, Plus, Check, AlertTriangle, Loader2,
 } from "lucide-react";
-import { Button, IconButton, Panel, StatTile, Banner } from "@/components/ui";
+import { Button, Panel, StatTile, Banner } from "@/components/ui";
+import { AppHeader, ManaPips } from "@/components/app-header";
+import { parseCSV, RARITY_COLOR, RARITY_ORDER, type Card } from "@/lib/csv";
 
 interface FileMeta {
   exists: boolean;
@@ -51,36 +52,12 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-function ManaSymbols({ small = false }: { small?: boolean }) {
-  const symbols = [
-    { s: "W", bg: "#e8ddb4", fg: "#333" },
-    { s: "U", bg: "#0e68ab", fg: "#fff" },
-    { s: "B", bg: "#2d2d2d", fg: "#fff" },
-    { s: "R", bg: "#c3202a", fg: "#fff" },
-    { s: "G", bg: "#00743e", fg: "#fff" },
-  ];
-  return (
-    <div className="flex gap-1.5 items-center">
-      {symbols.map(({ s, bg, fg }) => (
-        <span
-          key={s}
-          className={`rounded-full flex items-center justify-center font-bold shrink-0 ring-1 ring-white/10 ${small ? "w-5 h-5 text-[10px]" : "w-7 h-7 text-xs"}`}
-          style={{ background: bg, color: fg }}
-        >
-          {s}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const router = useRouter();
   const [meta, setMeta] = useState<FileMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [cards, setCards] = useState<Card[]>([]);
 
   // Backup state
   const [backups, setBackups] = useState<BackupFile[]>([]);
@@ -99,6 +76,10 @@ export default function DashboardPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    fetch("/api/collection-upload")
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((text) => setCards(text.trim() ? parseCSV(text) : []))
+      .catch(() => {});
   };
 
   const fetchBackups = () => {
@@ -204,7 +185,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <ManaSymbols />
+        <ManaPips size={14} />
         <p className="text-text-faint text-sm flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
         </p>
@@ -215,12 +196,12 @@ export default function DashboardPage() {
   if (!meta?.exists) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-5 text-center px-6">
-        <ManaSymbols />
-        <h2 className="text-xl sm:text-2xl font-bold text-text">No collection file found</h2>
+        <ManaPips size={14} />
+        <h2 className="font-serif text-4xl sm:text-5xl font-normal text-text">No collection yet</h2>
         <p className="text-text-muted max-w-sm leading-relaxed text-sm">
-          Import a ManaBox <code className="bg-surface border border-border rounded px-1.5 py-0.5 text-accent font-mono text-xs">collection.csv</code> export to get started.
+          Import a ManaBox <code className="bg-surface border border-border rounded px-1.5 py-0.5 text-accent-hover font-mono text-xs">collection.csv</code> export to get started.
         </p>
-        <Button variant="primary" className="w-full max-w-xs py-3.5" onClick={() => fileRef.current?.click()}>
+        <Button variant="primary" className="w-full max-w-xs min-h-[52px]" onClick={() => fileRef.current?.click()}>
           <Upload className="w-4 h-4" /> Import CSV
         </Button>
         <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
@@ -233,194 +214,197 @@ export default function DashboardPage() {
   const backupOk = backupMsg?.startsWith("ok:");
   const backupText = backupMsg?.replace(/^(ok|err):/, "");
 
+  const copies = cards.reduce((s, c) => s + (parseInt(c.Quantity) || 0), 0);
+  const value = cards.reduce((s, c) => s + (parseFloat(c["Purchase price"]) || 0) * (parseInt(c.Quantity) || 1), 0);
+  const sets = new Set(cards.map((c) => c["Set code"])).size;
+  const rarityCounts = Object.keys(RARITY_ORDER).map((r) => ({
+    rarity: r,
+    count: cards.filter((c) => c.Rarity === r).reduce((s, c) => s + (parseInt(c.Quantity) || 0), 0),
+  }));
+
   return (
     <div className="flex flex-col min-h-screen">
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-surface-2/90 backdrop-blur-md border-b border-border">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <ManaSymbols small />
-          <span className="text-sm font-semibold whitespace-nowrap">Collection Manager</span>
-        </div>
-        <div className="hidden sm:flex items-center gap-2.5">
-          <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {uploading ? "Uploading…" : "Import CSV"}
-          </Button>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
-          <Button onClick={handleDownload}>
-            <Download className="w-3.5 h-3.5" /> Download CSV
-          </Button>
-          <Button variant="primary" onClick={() => router.push("/collection")}>
-            Open collection <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-        <IconButton className="sm:hidden !w-9 !h-9 border border-border" onClick={() => setMenuOpen((o) => !o)}>
-          {menuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-        </IconButton>
-      </header>
+      <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
+      <AppHeader
+        actions={
+          <>
+            <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {uploading ? "Uploading…" : "Import CSV"}
+            </Button>
+            <Button onClick={handleDownload}>
+              <Download className="w-4 h-4" /> Export
+            </Button>
+          </>
+        }
+      />
 
-      {menuOpen && (
-        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-surface-2 border-b border-border">
-          <Button
-            className="w-full justify-start px-4 py-3"
-            disabled={uploading}
-            onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}
-          >
-            <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Import CSV"}
-          </Button>
-          <Button className="w-full justify-start px-4 py-3" onClick={() => { handleDownload(); setMenuOpen(false); }}>
-            <Download className="w-3.5 h-3.5" /> Download CSV
-          </Button>
-          <Button variant="primary" className="w-full justify-start px-4 py-3" onClick={() => router.push("/collection")}>
-            Open collection <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} hidden />
-        </div>
-      )}
-
-      {/* ── Content ── */}
-      <div className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-4 sm:gap-6">
+      <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-16 flex flex-col gap-8">
         {uploadMsg && (
           <Banner tone={uploadOk ? "success" : "danger"}>
-            {uploadOk ? <Check className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />}
+            {uploadOk ? <Check className="w-4 h-4 inline mr-2" /> : <AlertTriangle className="w-4 h-4 inline mr-2" />}
             {uploadText}
           </Banner>
         )}
 
-        {/* File card */}
-        <Panel className="p-4 sm:p-5 flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="shrink-0 w-11 h-11 rounded-lg bg-accent-soft border border-accent-border flex items-center justify-center">
-              <FileSpreadsheet className="w-5 h-5 text-accent" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm sm:text-base font-semibold truncate">{meta.filename}</div>
-              <div className="text-xs text-text-faint mt-0.5 font-mono truncate">persistent data volume</div>
-            </div>
+        {/* ── Hero ── */}
+        <section className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs tracking-[2px] uppercase text-text-faint font-semibold">Your library</span>
+            <h1 className="font-serif font-normal text-5xl sm:text-[64px] leading-none">
+              The collection, <em className="text-accent">up to date</em>
+            </h1>
+            <p className="text-text-muted max-w-[520px]">
+              {meta.filename} · updated {timeAgo(meta.lastModified)} · daily backup at 03:00
+            </p>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1 sm:flex-none" onClick={() => fileRef.current?.click()}>
-              Replace
-            </Button>
-            <Button size="sm" className="flex-1 sm:flex-none" onClick={handleDownload}>
-              Download
-            </Button>
-          </div>
-        </Panel>
+          <Link
+            href="/collection"
+            className="inline-flex items-center gap-2.5 min-h-[52px] px-6 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-semibold transition-colors"
+          >
+            Open collection <ArrowRight className="w-[18px] h-[18px]" />
+          </Link>
+        </section>
 
-        {/* Stats */}
-        <Panel className="overflow-hidden">
-          <div className="grid grid-cols-3 gap-px bg-border">
-            {[
-              { label: "File size", value: formatBytes(meta.size) },
-              { label: "Cards", value: meta.rows },
-              { label: "Columns", value: meta.columns },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-surface px-4 py-3.5">
-                <StatTile label={label} value={value} />
-              </div>
-            ))}
-          </div>
-          <div className="h-px bg-border" />
+        {/* ── Stats ── */}
+        <section aria-label="Summary" className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border border border-border rounded-2xl overflow-hidden">
           {[
-            { label: "Last modified", icon: <Clock className="w-3 h-3" />, value: formatDate(meta.lastModified), sub: timeAgo(meta.lastModified) },
-            { label: "Created", icon: <CalendarDays className="w-3 h-3" />, value: formatDate(meta.created), sub: timeAgo(meta.created) },
-            { label: "Format", icon: <FileType className="w-3 h-3" />, value: "ManaBox CSV", sub: "UTF-8, comma-separated" },
-          ].map(({ label, icon, value, sub }, i, arr) => (
-            <div
-              key={label}
-              className={`flex items-center justify-between gap-4 px-4 py-3.5 bg-surface ${i < arr.length - 1 ? "border-b border-border" : ""}`}
-            >
-              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-semibold text-text-faint shrink-0">
-                {icon}
-                {label}
-              </span>
-              <div className="flex flex-col items-end gap-0.5 min-w-0">
-                <span className="text-sm font-semibold text-accent text-right font-mono">{value}</span>
-                {sub && <span className="text-[10px] text-text-faint">{sub}</span>}
-              </div>
+            { label: "Unique cards", value: cards.length.toLocaleString() },
+            { label: "Total copies", value: copies.toLocaleString() },
+            { label: "Sets", value: sets.toLocaleString() },
+            { label: "Estimated value", value: `€${value.toFixed(2)}`, accent: true },
+          ].map(({ label, value, accent }) => (
+            <div key={label} className="bg-surface p-5 sm:p-6">
+              <StatTile label={label} value={<span className={accent ? "text-accent" : ""}>{value}</span>} />
             </div>
           ))}
-        </Panel>
+        </section>
 
-        {/* CTA */}
-        <button
-          onClick={() => router.push("/collection")}
-          className="flex items-center gap-3 sm:gap-4 bg-surface border border-border hover:border-accent-border hover:bg-surface-hover rounded-xl px-4 sm:px-6 py-4 sm:py-5 cursor-pointer transition-colors group text-left"
-        >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-soft border border-accent-border flex items-center justify-center shrink-0">
-            <PencilLine className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-accent" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold">Edit collection</div>
-            <div className="text-xs text-text-faint mt-0.5">Add, remove, or modify cards. Export when done.</div>
-          </div>
-          <ArrowRight className="ml-auto w-4 h-4 text-text-faint group-hover:text-text-muted shrink-0 transition-colors" />
-        </button>
-
-        {/* ── Backups ── */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-text-faint" /> Backups
-              </h2>
-              <p className="text-xs text-text-faint mt-0.5">Last 7 daily backups — auto-created at 03:00</p>
+        {/* ── Rarity breakdown ── */}
+        {copies > 0 && (
+          <section aria-label="By rarity" className="flex flex-col gap-3">
+            <div className="flex justify-between items-baseline">
+              <h2 className="text-[15px] font-semibold">By rarity</h2>
+              <span className="text-[13px] text-text-faint">copies</span>
             </div>
-            <Button size="sm" disabled={backingUp} onClick={handleManualBackup}>
-              {backingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              {backingUp ? "Backing up…" : "Backup now"}
-            </Button>
-          </div>
+            <div className="flex h-3 rounded-md overflow-hidden gap-0.5" aria-hidden="true">
+              {rarityCounts.filter((r) => r.count > 0).map(({ rarity, count }) => (
+                <span key={rarity} style={{ flex: count, background: RARITY_COLOR[rarity] }} />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-text-muted">
+              {rarityCounts.map(({ rarity, count }) => (
+                <span key={rarity} className="inline-flex items-center gap-2 capitalize">
+                  <span className="w-2 h-2 rounded-full" style={{ background: RARITY_COLOR[rarity] }} />
+                  {rarity}
+                  <b className="text-text font-mono font-semibold">{count.toLocaleString()}</b>
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
 
-          {backupMsg && (
-            <Banner tone={backupOk ? "success" : "danger"}>
-              {backupOk ? <Check className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />}
-              {backupText}
-            </Banner>
-          )}
+        <div className="flex flex-wrap gap-6 items-start">
+          {/* ── File card ── */}
+          <Panel className="flex-[1_1_360px] min-w-0 p-6 flex flex-col gap-5" aria-label="File">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 shrink-0 rounded-xl bg-accent-soft border border-accent-border flex items-center justify-center text-accent">
+                <FileSpreadsheet className="w-[22px] h-[22px]" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold truncate">{meta.filename}</span>
+                <span className="text-[13px] text-text-faint">ManaBox CSV · UTF-8 · persistent volume</span>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+              {[
+                ["Size", formatBytes(meta.size)],
+                ["Columns", meta.columns],
+                ["Modified", formatDate(meta.lastModified)],
+                ["Created", formatDate(meta.created)],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-0.5">
+                  <dt className="text-xs text-text-faint">{label}</dt>
+                  <dd className="font-mono text-sm">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex flex-wrap gap-2 pt-5 border-t border-border">
+              <Button className="flex-[1_1_140px] bg-surface-hover" onClick={() => fileRef.current?.click()}>
+                Replace file
+              </Button>
+              <Button className="flex-[1_1_140px] bg-surface-hover" onClick={handleDownload}>
+                Download
+              </Button>
+            </div>
+          </Panel>
 
-          {backups.length === 0 ? (
-            <Panel className="px-4 py-6 text-center text-text-faint text-sm">
-              No backups yet — click Backup now to create one.
-            </Panel>
-          ) : (
-            <Panel className="overflow-hidden divide-y divide-border">
-              {backups.map((b) => {
-                const isRestoring = restoring === b.filename;
-                const isConfirming = confirmRestore === b.filename;
-                const dateLabel = b.filename.replace("collection-", "").replace(".csv", "");
-                return (
-                  <div key={b.filename} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-text">{dateLabel}</div>
-                      <div className="text-xs text-text-faint mt-0.5">
-                        {formatBytes(b.size)} · {timeAgo(b.created)}
+          {/* ── Backups ── */}
+          <Panel className="flex-[1.4_1_420px] min-w-0 p-6 flex flex-col gap-4" aria-label="Backups">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div className="flex flex-col">
+                <h2 className="font-semibold">Backups</h2>
+                <span className="text-[13px] text-text-faint">Last 7 days · automatic at 03:00</span>
+              </div>
+              <Button variant="soft" disabled={backingUp} onClick={handleManualBackup}>
+                {backingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {backingUp ? "Backing up…" : "Back up now"}
+              </Button>
+            </div>
+
+            {backupMsg && (
+              <Banner tone={backupOk ? "success" : "danger"}>
+                {backupOk ? <Check className="w-4 h-4 inline mr-2" /> : <AlertTriangle className="w-4 h-4 inline mr-2" />}
+                {backupText}
+              </Banner>
+            )}
+
+            {backups.length === 0 ? (
+              <p className="py-6 text-center text-text-faint text-sm">
+                No backups yet — click Back up now to create one.
+              </p>
+            ) : (
+              <ol className="flex flex-col">
+                {backups.map((b, i) => {
+                  const isRestoring = restoring === b.filename;
+                  const isConfirming = confirmRestore === b.filename;
+                  const dateLabel = b.filename.replace("collection-", "").replace(".csv", "");
+                  return (
+                    <li key={b.filename} className="flex flex-wrap items-center gap-x-3.5 gap-y-1 py-3 border-b border-border last:border-b-0">
+                      <span
+                        aria-hidden="true"
+                        className={`w-2.5 h-2.5 rounded-full ${i === 0 ? "bg-accent shadow-[0_0_0_4px_#2a2314]" : "bg-[#3a3b42]"}`}
+                      />
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <span className="font-mono text-sm">{dateLabel}</span>
+                        <span className="text-xs text-text-faint">{formatBytes(b.size)} · {timeAgo(b.created)}</span>
                       </div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
+                      {i === 0 && !isConfirming && (
+                        <span className="text-xs text-text-muted border border-border-strong rounded-full px-2.5 py-0.5">Latest</span>
+                      )}
                       {isConfirming ? (
-                        <div className="flex gap-1.5">
-                          <Button variant="danger" size="sm" disabled={isRestoring} onClick={() => handleRestore(b.filename)}>
-                            {isRestoring ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[13px] text-danger">Replace current collection?</span>
+                          <Button variant="danger" disabled={isRestoring} onClick={() => handleRestore(b.filename)}>
+                            {isRestoring ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm"}
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setConfirmRestore(null)}>
+                          <Button variant="ghost" onClick={() => setConfirmRestore(null)}>
                             Cancel
                           </Button>
                         </div>
                       ) : (
-                        <Button size="sm" disabled={!!restoring} onClick={() => setConfirmRestore(b.filename)}>
-                          <RotateCcw className="w-3 h-3" /> Restore
+                        <Button variant="ghost" disabled={!!restoring} onClick={() => setConfirmRestore(b.filename)}>
+                          Restore
                         </Button>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-            </Panel>
-          )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </Panel>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

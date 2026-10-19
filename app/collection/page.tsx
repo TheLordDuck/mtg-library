@@ -3,12 +3,12 @@
 import {
   useState, useRef, useMemo, useEffect, useCallback, ChangeEvent,
 } from "react";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Upload, Download, Plus, Search, FileText, X, Pencil, Trash2,
-  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Menu,
+  Upload, Download, Plus, Search, FileText, X, Pencil, Trash2,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown,
   Check, AlertTriangle, Loader2,
 } from "lucide-react";
+import { AppHeader } from "@/components/app-header";
 import {
   parseCSV, toCSV, downloadCSV,
   RARITY_ORDER, RARITY_COLOR, CONDITION_LABELS, CONDITIONS, LANGUAGES,
@@ -161,7 +161,7 @@ function SetTooltip({ setCode }: { setCode: string }) {
   return (
     <>
       <span
-        className="inline-block bg-white/5 border border-border rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-text-muted uppercase cursor-default hover:border-accent hover:text-accent transition-colors"
+        className="inline-block bg-surface-hover border border-border-strong rounded-md px-2 py-0.5 font-mono text-xs text-[#c9c3b6] uppercase cursor-default hover:border-accent hover:text-accent transition-colors"
         onMouseEnter={(e) => {
           setPos({ x: e.clientX, y: e.clientY }); setVisible(true);
           if (!iconUrl) {
@@ -400,8 +400,8 @@ function MobileCardRow({
     <>
       {imgOverlay && imgUrl && <ImageOverlay src={imgUrl} alt={card.Name} onClose={() => setImgOverlay(false)} />}
       {setOverlay && <SetIconOverlay setCode={card["Set code"]} onClose={() => setSetOverlay(false)} />}
-      <div className={`px-4 py-3 border-b border-white/5 flex gap-3 ${selected ? "bg-accent-soft" : ""}`}>
-        <input type="checkbox" className="accent-[var(--color-accent)] mt-1 shrink-0" checked={selected} onChange={onSelect} />
+      <div className={`px-4 py-3 border-b border-[#1d1e23] flex gap-3 ${selected ? "bg-[#1d1910]" : ""}`}>
+        <input type="checkbox" aria-label={`Select ${card.Name}`} className="accent-[var(--color-accent)] w-[18px] h-[18px] mt-0.5 shrink-0" checked={selected} onChange={onSelect} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
             <button
@@ -418,7 +418,7 @@ function MobileCardRow({
             {card.Foil !== "normal" && <Badge tone="accent" className="capitalize">{card.Foil}</Badge>}
             <Badge>{CONDITION_LABELS[card.Condition] ?? card.Condition}</Badge>
             <span className="uppercase tracking-wider">{card.Language}</span>
-            <span className="font-semibold text-accent font-mono">×{card.Quantity}</span>
+            <span className="font-semibold text-text font-mono">×{card.Quantity}</span>
             {deckQty !== undefined && <span className="text-warning font-semibold">deck: {deckQty}</span>}
           </div>
         </div>
@@ -446,9 +446,9 @@ function Pagination({ page, totalPages, onChange }: { page: number; totalPages: 
     pages.push(totalPages);
   }
   const btnCls = (active: boolean) =>
-    `min-w-[32px] h-8 px-2 rounded text-sm transition-colors ${active ? "bg-accent text-white font-semibold" : "text-text-muted hover:bg-surface-hover hover:text-text"}`;
+    `min-w-10 h-10 px-2 rounded-lg text-sm font-mono transition-colors ${active ? "bg-accent text-accent-ink font-semibold" : "text-text-muted hover:bg-surface-hover hover:text-text"}`;
   return (
-    <div className="flex items-center gap-1 px-4 sm:px-6 py-2.5 border-t border-border bg-surface-2">
+    <div className="flex flex-wrap items-center gap-1 px-4 py-2 border-t border-border bg-surface">
       <button onClick={() => onChange(page - 1)} disabled={page === 1} className="h-8 px-3 flex items-center gap-1 text-sm text-text-muted hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
         <ChevronLeft className="w-3.5 h-3.5" /> Prev
       </button>
@@ -468,8 +468,8 @@ function Pagination({ page, totalPages, onChange }: { page: number; totalPages: 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CollectionPage() {
-  const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
+  const [rarityFilter, setRarityFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 250);
@@ -482,7 +482,6 @@ export default function CollectionPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deckFilter, setDeckFilter] = useState<Map<string, number> | null>(null);
   const [deckFileName, setDeckFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -559,6 +558,9 @@ export default function CollectionPage() {
     if (deckFilter) {
       base = cards.filter((c) => deckFilter.has(normalize(c.Name)));
     }
+    if (rarityFilter) {
+      base = base.filter((c) => c.Rarity === rarityFilter);
+    }
     if (q) {
       base = base.filter((c) =>
         normalize(c.Name).includes(q) ||
@@ -578,7 +580,7 @@ export default function CollectionPage() {
         ? String(av).localeCompare(String(bv))
         : String(bv).localeCompare(String(av));
     });
-  }, [cards, debouncedSearch, sortField, sortAsc, deckFilter]);
+  }, [cards, debouncedSearch, sortField, sortAsc, deckFilter, rarityFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -647,12 +649,14 @@ export default function CollectionPage() {
     ["Name", "Name"],
     ["Set code", "Set"],
     ["Rarity", "Rarity"],
-    [null, "Foil"],
+    [null, "Finish"],
     ["Quantity", "Qty"],
-    [null, "Cond."],
-    [null, "Lang."],
+    [null, "Condition"],
+    [null, "Language"],
+    ["Purchase price", "Price"],
     ...(deckFilter ? [[null, "Deck"]] as [null, string][] : []),
   ];
+  const rightAligned = new Set(["Qty", "Price", "Deck"]);
 
   return (
     <div ref={topRef} className="flex flex-col min-h-screen">
@@ -693,101 +697,114 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 bg-surface-2/90 backdrop-blur-md border-b border-border">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex gap-1 sm:gap-1.5">
-            {[["W","#e8ddb4","#333"],["U","#0e68ab","#fff"],["B","#2d2d2d","#fff"],["R","#c3202a","#fff"],["G","#00743e","#fff"]].map(([s,bg,fg]) => (
-              <span key={s} className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ring-1 ring-white/10" style={{ background: bg, color: fg }}>{s}</span>
-            ))}
-          </div>
-          <span className="text-sm font-semibold">Collection Editor</span>
-        </div>
-        <div className="hidden sm:flex gap-2.5">
-          <Button onClick={() => router.push("/")}><ArrowLeft className="w-3.5 h-3.5" /> Dashboard</Button>
-          <Button onClick={() => fileRef.current?.click()}><Upload className="w-3.5 h-3.5" /> Import</Button>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} hidden />
-          <Button variant="primary" onClick={() => downloadCSV(cards)}><Download className="w-3.5 h-3.5" /> Export</Button>
-        </div>
-        <IconButton className="sm:hidden !w-9 !h-9 border border-border" onClick={() => setMobileMenuOpen((o) => !o)}>
-          {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-        </IconButton>
-      </header>
+      <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} hidden />
+      <input ref={deckRef} type="file" accept=".txt,.dec,.dek" onChange={handleDeckFile} hidden />
+      <AppHeader
+        actions={
+          <>
+            <Button onClick={() => fileRef.current?.click()}><Upload className="w-4 h-4" /> Import</Button>
+            <Button onClick={() => downloadCSV(cards)}><Download className="w-4 h-4" /> Export</Button>
+          </>
+        }
+      />
 
-      {mobileMenuOpen && (
-        <div className="sm:hidden flex flex-col gap-2 px-4 py-3 bg-surface-2 border-b border-border">
-          <Button className="w-full justify-start px-4 py-2.5" onClick={() => { router.push("/"); setMobileMenuOpen(false); }}>
-            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
-          </Button>
-          <Button className="w-full justify-start px-4 py-2.5" onClick={() => { fileRef.current?.click(); setMobileMenuOpen(false); }}>
-            <Upload className="w-3.5 h-3.5" /> Import CSV
-          </Button>
-          <Button variant="primary" className="w-full justify-start px-4 py-2.5" onClick={() => { downloadCSV(cards); setMobileMenuOpen(false); }}>
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </Button>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} hidden />
-        </div>
-      )}
+      <main className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 pt-8 pb-16 flex flex-col gap-5">
 
-      {/* ── Stats bar ── */}
-      <div className="grid grid-cols-2 sm:flex bg-surface-2 border-b border-border">
-        {[["unique cards", cards.length], ["total copies", stats.total], ["sets", stats.sets], ["total value", `€${stats.value.toFixed(2)}`]].map(([label, val]) => (
-          <div key={label as string} className="px-4 sm:px-5 py-2.5 sm:py-3 border-r border-b sm:border-b-0 border-border last:border-r-0 [&:nth-child(2)]:border-r-0 sm:[&:nth-child(2)]:border-r sm:[&:nth-child(4)]:border-r-0">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-widest text-text-faint font-semibold block mb-0.5">{label}</span>
-            <span className="text-lg sm:text-xl font-bold text-accent font-mono">{val}</span>
-          </div>
-        ))}
+      {/* ── Title + stats ── */}
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+        <h1 className="font-serif font-normal text-5xl leading-none">Collection</h1>
+        <dl className="flex flex-wrap gap-x-8 gap-y-2">
+          {[
+            ["Unique", cards.length.toLocaleString()],
+            ["Copies", stats.total.toLocaleString()],
+            ["Sets", stats.sets.toLocaleString()],
+            ["Value", `€${stats.value.toFixed(2)}`],
+          ].map(([label, val]) => (
+            <div key={label} className="flex flex-col">
+              <dt className="text-xs text-text-faint">{label}</dt>
+              <dd className={`font-mono text-xl font-semibold ${label === "Value" ? "text-accent" : ""}`}>{val}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-border">
-        <div className="relative flex-1 min-w-[160px]">
+      <div className="flex flex-wrap items-center gap-2.5 p-3 bg-surface border border-border rounded-2xl">
+        <div className="relative flex-[1_1_280px] min-w-0">
           <Search className="w-4 h-4 text-text-faint absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <Input
-            className="pl-9"
-            placeholder="Search by name, set…"
+            className="pl-10"
+            aria-label="Search cards"
+            placeholder="Search by name or set…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
+        <div role="group" aria-label="Rarity" className="flex flex-wrap gap-1.5">
+          {[null, ...Object.keys(RARITY_ORDER)].map((r) => {
+            const on = rarityFilter === r;
+            return (
+              <button
+                key={r ?? "all"}
+                aria-pressed={on}
+                onClick={() => { setRarityFilter(r); setPage(1); }}
+                className={`inline-flex items-center gap-2 min-h-11 px-3.5 rounded-full text-[13px] capitalize border transition-colors ${
+                  on ? "border-accent bg-accent-soft text-accent-hover" : "border-border-strong text-text-muted hover:text-text"
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ background: r ? RARITY_COLOR[r] : "var(--color-text)" }} />
+                {r ?? "All"}
+              </button>
+            );
+          })}
+        </div>
         <div className="flex gap-2 ml-auto">
-          {selected.size > 0 && (
-            <Button variant="danger" onClick={deleteSelected}>
-              <Trash2 className="w-3.5 h-3.5" /> Delete {selected.size}
-            </Button>
-          )}
           <Button
             variant={deckFilter ? "warning" : "secondary"}
             onClick={() => deckFilter ? clearDeckFilter() : deckRef.current?.click()}
           >
-            {deckFilter ? <X className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
-            Deck
+            {deckFilter ? <X className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+            {deckFilter ? "Clear deck" : "Check deck"}
           </Button>
-          <input ref={deckRef} type="file" accept=".txt,.dec,.dek" onChange={handleDeckFile} hidden />
-          <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="w-3.5 h-3.5" /> Add</Button>
+          <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="w-4 h-4" /> Add card</Button>
         </div>
       </div>
 
+      {/* ── Selection bar ── */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2 rounded-xl bg-accent-soft border border-accent-border text-sm">
+          <span className="font-semibold text-accent-hover">{selected.size} selected</span>
+          <span className="flex-1" />
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Deselect</Button>
+          <Button variant="danger" size="sm" onClick={deleteSelected}>
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
+        </div>
+      )}
+
+      <div className="border border-border rounded-2xl overflow-hidden bg-surface-2">
       {/* ── Desktop table ── */}
       <div className="overflow-x-auto hidden sm:block">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-surface-2">
-              <th className="w-9 px-3.5 py-2.5 text-left border-b border-border">
-                <input type="checkbox" className="accent-[var(--color-accent)] w-3.5 h-3.5 cursor-pointer" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
+            <tr className="bg-surface">
+              <th className="w-11 px-4 py-3 text-left border-b border-border">
+                <input type="checkbox" aria-label="Select all on this page" className="accent-[var(--color-accent)] w-[18px] h-[18px] cursor-pointer align-middle" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
               </th>
               {tableHeaders.map(([field, label]) => (
                 <th
                   key={label}
                   onClick={field ? () => toggleSort(field) : undefined}
-                  className={`px-3.5 py-2.5 text-left text-[11px] uppercase tracking-widest font-semibold border-b border-border whitespace-nowrap ${
-                    field ? "cursor-pointer select-none hover:text-text text-text-faint" : "text-text-faint"
-                  } ${label === "Deck" ? "text-warning" : ""}`}
+                  className={`px-3 py-3 text-xs font-semibold border-b border-border whitespace-nowrap ${
+                    rightAligned.has(label) ? "text-right" : "text-left"
+                  } ${
+                    field ? "cursor-pointer select-none hover:text-text" : ""
+                  } ${label === "Deck" ? "text-warning" : sortField === field ? "text-text" : "text-text-faint"}`}
                 >
                   {label}{field && <SI field={field} />}
                 </th>
               ))}
-              <th className="w-16 border-b border-border" />
+              <th className="w-24 border-b border-border"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -797,33 +814,32 @@ export default function CollectionPage() {
                 <tr
                   key={card._id}
                   onDoubleClick={() => openEdit(card)}
-                  className={`border-b border-white/5 transition-colors cursor-default ${selected.has(card._id) ? "bg-accent-soft" : "hover:bg-white/[0.03]"}`}
+                  className={`border-b border-[#1d1e23] transition-colors cursor-default ${selected.has(card._id) ? "bg-[#1d1910]" : "hover:bg-white/[0.025]"}`}
                 >
-                  <td className="px-3.5 py-2.5">
-                    <input type="checkbox" className="accent-[var(--color-accent)] w-3.5 h-3.5 cursor-pointer" checked={selected.has(card._id)} onChange={() => toggleSelect(card._id)} />
+                  <td className="px-4 py-1.5">
+                    <input type="checkbox" aria-label={`Select ${card.Name}`} className="accent-[var(--color-accent)] w-[18px] h-[18px] cursor-pointer align-middle" checked={selected.has(card._id)} onChange={() => toggleSelect(card._id)} />
                   </td>
-                  <td className="px-3.5 py-2.5 font-medium"><CardTooltip scryfallId={card["Scryfall ID"]} name={card.Name} /></td>
-                  <td className="px-3.5 py-2.5"><SetTooltip setCode={card["Set code"]} /></td>
-                  <td className="px-3.5 py-2.5">
-                    <span className="flex items-center text-xs capitalize text-text-muted">
+                  <td className="px-3 py-1.5 font-medium"><CardTooltip scryfallId={card["Scryfall ID"]} name={card.Name} /></td>
+                  <td className="px-3 py-1.5"><SetTooltip setCode={card["Set code"]} /></td>
+                  <td className="px-3 py-1.5">
+                    <span className="flex items-center capitalize text-[#c9c3b6]">
                       <RarityPip rarity={card.Rarity} />{card.Rarity}
                     </span>
                   </td>
-                  <td className="px-3.5 py-2.5">
+                  <td className="px-3 py-1.5">
                     {card.Foil !== "normal" && <Badge tone="accent" className="capitalize">{card.Foil}</Badge>}
                   </td>
-                  <td className="px-3.5 py-2.5 text-center font-semibold text-accent font-mono">{card.Quantity}</td>
-                  <td className="px-3.5 py-2.5">
-                    <Badge>{CONDITION_LABELS[card.Condition] ?? card.Condition}</Badge>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-[11px] uppercase tracking-wider text-text-faint">{card.Language}</td>
+                  <td className="px-3 py-1.5 text-right font-semibold font-mono">{card.Quantity}</td>
+                  <td className="px-3 py-1.5 text-[#c9c3b6]">{CONDITION_LABELS[card.Condition] ?? card.Condition}</td>
+                  <td className="px-3 py-1.5 text-xs uppercase text-text-muted">{card.Language}</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{card["Purchase price"] ? `€${parseFloat(card["Purchase price"]).toFixed(2)}` : "—"}</td>
                   {deckFilter && (
-                    <td className="px-3.5 py-2.5 text-center font-semibold text-warning text-sm">{deckQty ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono text-warning">{deckQty ?? "—"}</td>
                   )}
-                  <td className="px-3.5 py-2.5">
-                    <div className="flex gap-1">
-                      <IconButton tone="accent" title="Edit" onClick={() => openEdit(card)}><Pencil className="w-3.5 h-3.5" /></IconButton>
-                      <IconButton tone="danger" title="Delete" onClick={() => deleteRow(card._id)}><Trash2 className="w-3.5 h-3.5" /></IconButton>
+                  <td className="px-4 py-1.5">
+                    <div className="flex gap-1 justify-end">
+                      <IconButton tone="accent" title={`Edit ${card.Name}`} onClick={() => openEdit(card)}><Pencil className="w-4 h-4" /></IconButton>
+                      <IconButton tone="danger" title={`Delete ${card.Name}`} onClick={() => deleteRow(card._id)}><Trash2 className="w-4 h-4" /></IconButton>
                     </div>
                   </td>
                 </tr>
@@ -842,10 +858,10 @@ export default function CollectionPage() {
           ? <div className="text-center text-text-faint py-16 text-sm">No cards match your search.</div>
           : (
             <>
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 bg-surface-2/50">
-                <input type="checkbox" className="accent-[var(--color-accent)]" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
+              <label className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface">
+                <input type="checkbox" className="accent-[var(--color-accent)] w-[18px] h-[18px]" checked={selected.size === visible.length && visible.length > 0} onChange={toggleAll} />
                 <span className="text-xs text-text-faint">Select all on this page ({visible.length})</span>
-              </div>
+              </label>
               {visible.map((card) => (
                 <MobileCardRow
                   key={card._id}
@@ -865,11 +881,13 @@ export default function CollectionPage() {
       {/* ── Pagination & footer ── */}
       <Pagination page={safePage} totalPages={totalPages} onChange={goToPage} />
 
-      <div className="px-4 sm:px-6 py-2.5 text-xs text-text-faint border-t border-border bg-surface-2">
-        Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} cards
+      <div className="px-4 py-3 text-[13px] text-text-faint border-t border-border bg-surface">
+        Showing {filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} cards
         {cards.length !== filtered.length && ` (filtered from ${cards.length})`}
         {search && ` · "${search}"`}
       </div>
+      </div>
+      </main>
 
       {editRow && <EditModal row={editRow} onSave={handleSave} onClose={() => setEditRow(null)} />}
       {showAdd && <AddCardModal onAdd={handleAdd} onClose={() => setShowAdd(false)} />}
