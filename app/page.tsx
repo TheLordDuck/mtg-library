@@ -6,7 +6,7 @@ import {
   Upload, Download, ArrowRight, FileSpreadsheet, Plus, Check, AlertTriangle, Loader2,
 } from "lucide-react";
 import { Button, Panel, StatTile, Banner } from "@/components/ui";
-import { AppHeader, ManaPips } from "@/components/app-header";
+import { AppHeader, Logo } from "@/components/app-header";
 import { parseCSV, RARITY_COLOR, RARITY_ORDER, type Card } from "@/lib/csv";
 
 interface FileMeta {
@@ -185,7 +185,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <ManaPips size={14} />
+        <Logo size={72} />
         <p className="text-text-faint text-sm flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
         </p>
@@ -196,7 +196,7 @@ export default function DashboardPage() {
   if (!meta?.exists) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-5 text-center px-6">
-        <ManaPips size={14} />
+        <Logo size={72} />
         <h2 className="font-serif text-4xl sm:text-5xl font-normal text-text">No collection yet</h2>
         <p className="text-text-muted max-w-sm leading-relaxed text-sm">
           Import a ManaBox <code className="bg-surface border border-border rounded px-1.5 py-0.5 text-accent-hover font-mono text-xs">collection.csv</code> export to get started.

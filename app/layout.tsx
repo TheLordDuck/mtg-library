@@ -22,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MTG Collection",
-  description: "CSV Manabox Collection Manage",
+  title: "Grimoire",
+  description: "MTG collection manager for ManaBox CSV exports",
 };
 
 export default function RootLayout({
