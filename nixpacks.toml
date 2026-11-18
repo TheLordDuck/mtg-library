@@ -1,0 +1,6 @@
+# Build config for Nixpacks (used by Coolify). Only adds variables;
+# everything else is still auto-detected.
+
+[variables]
+# Caps Node's heap so `next build` can't eat all the RAM of the 4 GB VPS
+NODE_OPTIONS = "--max-old-space-size=1536"
